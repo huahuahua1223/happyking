@@ -8,6 +8,31 @@ interface WalrusResponse {
   newlyCreated?: { blobObject: { blobId: string } }
 }
 
+// 辅助函数：规范化 Walrus blobId
+function normalizeWalrusBlobId(blobId: string): string {
+  if (!blobId) return '';
+  
+  // 移除开头的斜杠
+  let normalized = blobId.startsWith('/') ? blobId.substring(1) : blobId;
+  
+  // 移除可能包含的URL部分
+  if (normalized.includes('aggregator.walrus')) {
+    try {
+      const url = new URL(normalized);
+      normalized = url.pathname.split('/').pop() || '';
+    } catch (e) {
+      // 如果不是有效URL，保持原样
+    }
+  }
+  
+  // 如果是路径格式，提取最后一部分
+  if (normalized.includes('/')) {
+    normalized = normalized.split('/').pop() || '';
+  }
+  
+  return normalized.trim();
+}
+
 // 上传文本数据
 export async function uploadTextData(text: string, retries = 5): Promise<string> {
   const blob = new Blob([text], { type: "text/plain" })
@@ -92,30 +117,67 @@ async function uploadData(data: ArrayBuffer, contentType: string, retries = 5): 
 }
 
 // 查询数据
-export async function fetchDataById(blobId: string, retries = 3): Promise<ArrayBuffer> {
+export async function fetchDataById(blobId: string, retries = 3, timeoutMs = 15000): Promise<ArrayBuffer> {
   let lastError: any = null
-
+  
+  // 规范化 blobId
+  const normalizedBlobId = normalizeWalrusBlobId(blobId);
+  
+  if (!normalizedBlobId) {
+    throw new Error(`无效的 Blob ID: ${blobId}`);
+  }
+  
+  console.log(`获取数据, 原始blobId: ${blobId}, 规范化后: ${normalizedBlobId}`);
+  
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      console.log(`尝试获取 Blob ID ${blobId} (${attempt}/${retries})`)
-      const response = await axios.get(`${AGGREGATOR}/${blobId}`, {
-        responseType: "arraybuffer",
-        timeout: 60000, // 增加到60秒超时
-      })
-      return response.data
+      console.log(`尝试获取 Blob ID ${normalizedBlobId} (${attempt}/${retries})`)
+      
+      // 创建 AbortController 用于手动实现超时控制
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      
+      try {
+        const response = await axios.get(`${AGGREGATOR}/${normalizedBlobId}`, {
+          responseType: "arraybuffer",
+          timeout: timeoutMs,
+          signal: controller.signal as any, // 类型转换以适配 axios
+        })
+        
+        clearTimeout(timeoutId);
+        return response.data;
+      } catch (axiosError) {
+        clearTimeout(timeoutId);
+        throw axiosError;
+      }
     } catch (error: any) {
       lastError = error
-      console.error(`获取 Blob ID ${blobId} 失败 (尝试 ${attempt}/${retries}):`, error.message || error)
+      
+      const errorMessage = error.message || String(error);
+      console.error(`获取 Blob ID ${normalizedBlobId} 失败 (尝试 ${attempt}/${retries}):`, errorMessage);
 
+      // 处理超时错误
+      if (error.name === 'AbortError' || errorMessage.includes('aborted')) {
+        console.error(`请求超时 (${timeoutMs}ms)`);
+        
+        if (attempt < retries) {
+          // 下一次尝试增加超时时间
+          timeoutMs = Math.min(timeoutMs * 1.5, 45000);
+          console.log(`增加超时时间到 ${timeoutMs}ms 并重试...`);
+          continue;
+        }
+      }
+      
       // 如果是超时或网络错误，则重试
       if (
         axios.isAxiosError(error) &&
         (error.code === "ECONNABORTED" ||
           error.code === "ETIMEDOUT" ||
-          error.message.includes("timeout") ||
+          errorMessage.includes("timeout") ||
           error.response?.status === 502 ||
           error.response?.status === 503 ||
-          error.response?.status === 504)
+          error.response?.status === 504 ||
+          error.response?.status === 404)
       ) {
         // 使用指数退避策略
         const waitTime = Math.min(3000 * Math.pow(1.5, attempt - 1), 15000)
@@ -124,37 +186,69 @@ export async function fetchDataById(blobId: string, retries = 3): Promise<ArrayB
         continue
       }
 
-      // 其他错误直接抛出
+      // 其他错误，如果还有重试次数，继续尝试
+      if (attempt < retries) {
+        const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+        console.log(`未知错误，等待 ${waitTime}ms 后重试...`);
+        await new Promise((resolve) => setTimeout(resolve, waitTime));
+        continue;
+      }
+      
+      // 最后一次重试也失败，抛出错误
       throw error
     }
   }
 
   // 所有重试都失败
-  console.error(`所有 ${retries} 次尝试获取 Blob ID ${blobId} 均失败`)
-  throw lastError
+  console.error(`所有 ${retries} 次尝试获取 Blob ID ${normalizedBlobId} 均失败`)
+  throw new Error(`获取内容多次尝试失败: ${lastError?.message || '未知错误'}`);
 }
 
 // 查询并解析JSON数据
-export async function fetchJsonDataById(blobId: string): Promise<any> {
+export async function fetchJsonDataById(blobId: string, maxRetries = 3): Promise<any> {
   try {
-    const buffer = await fetchDataById(blobId)
-    const text = new TextDecoder().decode(buffer)
-    try {
-      return JSON.parse(text)
-    } catch (parseError) {
-      console.error(`解析 Blob ID ${blobId} 的JSON数据失败:`, parseError)
-      // 返回一个空对象而不是抛出错误
-      return {}
-    }
+    // 使用 Promise.race 和超时控制
+    const timeout = 30000; // 30秒总超时
+    
+    const fetchPromise = (async () => {
+      try {
+        const buffer = await fetchDataById(blobId, maxRetries);
+        const text = new TextDecoder().decode(buffer);
+        try {
+          return JSON.parse(text);
+        } catch (parseError) {
+          console.error(`解析 Blob ID ${blobId} 的JSON数据失败:`, parseError);
+          return { error: "数据格式错误", message: "无法解析JSON数据" };
+        }
+      } catch (fetchError) {
+        console.error(`获取 Blob ID ${blobId} 失败:`, fetchError);
+        throw fetchError;
+      }
+    })();
+    
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error("获取内容超时")), timeout);
+    });
+    
+    // 返回先完成的 Promise
+    return await Promise.race([fetchPromise, timeoutPromise]);
   } catch (error) {
-    console.error(`获取 Blob ID ${blobId} 失败:`, error)
-    // 返回一个空对象而不是抛出错误
-    return {}
+    console.error(`获取或解析数据失败: ${error instanceof Error ? error.message : String(error)}`);
+    return { 
+      error: "获取数据失败", 
+      message: error instanceof Error ? error.message : "未知错误",
+      blobId
+    };
   }
 }
 
 // 查询并解析文本数据
 export async function fetchTextDataById(blobId: string): Promise<string> {
-  const buffer = await fetchDataById(blobId)
-  return new TextDecoder().decode(buffer)
+  try {
+    const buffer = await fetchDataById(blobId);
+    return new TextDecoder().decode(buffer);
+  } catch (error) {
+    console.error(`获取文本数据失败: ${error instanceof Error ? error.message : String(error)}`);
+    return `无法加载内容: ${error instanceof Error ? error.message : "未知错误"}`;
+  }
 }

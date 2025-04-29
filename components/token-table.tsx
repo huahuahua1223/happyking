@@ -4,8 +4,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
+import { useLanguage } from "@/lib/i18n/context"
 
 export function TokenTable() {
+  const { t } = useLanguage()
+
   const tokens = [
     {
       id: 1,
@@ -83,13 +86,13 @@ export function TokenTable() {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[50px]">#</TableHead>
-          <TableHead>代币</TableHead>
-          <TableHead className="text-right">价格</TableHead>
-          <TableHead className="text-right">24h变化</TableHead>
-          <TableHead className="text-right">市值</TableHead>
-          <TableHead className="text-right">24h交易量</TableHead>
-          <TableHead className="text-right">操作</TableHead>
+          <TableHead className="w-[50px]">{t("tokens.number")}</TableHead>
+          <TableHead>{t("tokens.token")}</TableHead>
+          <TableHead className="text-right">{t("tokens.price")}</TableHead>
+          <TableHead className="text-right">{t("tokens.change")}</TableHead>
+          <TableHead className="text-right">{t("tokens.market.cap")}</TableHead>
+          <TableHead className="text-right">{t("tokens.volume")}</TableHead>
+          <TableHead className="text-right">{t("tokens.actions")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -115,7 +118,7 @@ export function TokenTable() {
             <TableCell className="text-right">{token.volume}</TableCell>
             <TableCell className="text-right">
               <Button variant="outline" size="sm">
-                交易
+                {t("tokens.trade")}
               </Button>
             </TableCell>
           </TableRow>

@@ -18,7 +18,8 @@ import axios from "axios"
 import { AlertCircle, ArrowLeft, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { use, useState } from "react"
+import { useLanguage } from "@/lib/i18n/context"
 
 // 这个页面是纯提交页面，不需要加载任何数据
 export default function CreateNewsPage() {
@@ -26,6 +27,7 @@ export default function CreateNewsPage() {
   const { isConnected } = useWallet()
   const { toast } = useToast()
   const { news } = useContracts()
+  const { t } = useLanguage()
 
   const [formData, setFormData] = useState({
     title: "",
@@ -214,84 +216,84 @@ export default function CreateNewsPage() {
     <div className="container mx-auto px-4 py-8">
       <Link href="/news" className="inline-flex items-center mb-6 text-muted-foreground hover:text-foreground">
         <ArrowLeft className="mr-2 h-4 w-4" />
-        返回新闻列表
+        {t("news.back")}
       </Link>
 
       <Card>
         <CardHeader>
-          <CardTitle>创建新闻投放</CardTitle>
-          <CardDescription>填写新闻信息并设置投放时长，系统将自动计算费用</CardDescription>
+          <CardTitle>{t("news.create")}</CardTitle>
+          <CardDescription>{t("news.create.description")}</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="title">新闻标题</Label>
+              <Label htmlFor="title">{t("news.title")}</Label>
               <Input
                 id="title"
                 name="title"
                 value={formData.title}
                 onChange={handleChange}
-                placeholder="输入新闻标题"
+                placeholder={t("news.title.placeholder")}
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="content">新闻内容</Label>
+              <Label htmlFor="content">{t("news.content")}</Label>
               <Textarea
                 id="content"
                 name="content"
                 value={formData.content}
                 onChange={handleChange}
-                placeholder="输入新闻内容"
+                placeholder={t("news.content.placeholder")}
                 className="min-h-[200px]"
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="newsType">新闻类型</Label>
+              <Label htmlFor="newsType">{t("news.type")}</Label>
               <Select value={formData.newsType} onValueChange={(value) => handleSelectChange("newsType", value)}>
                 <SelectTrigger id="newsType">
-                  <SelectValue placeholder="选择新闻类型" />
+                  <SelectValue placeholder={t("news.type.placeholder")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Meme">Meme文化</SelectItem>
-                  <SelectItem value="Exchanges">交易所新闻</SelectItem>
-                  <SelectItem value="Token">加密货币</SelectItem>
-                  <SelectItem value="NFT">NFT相关</SelectItem>
-                  <SelectItem value="Other">其他</SelectItem>
+                  <SelectItem value="Meme">{t("news.type.meme")}</SelectItem>
+                  <SelectItem value="Exchanges">{t("news.type.exchanges")}</SelectItem>
+                  <SelectItem value="Token">{t("news.type.token")}</SelectItem>
+                  <SelectItem value="NFT">{t("news.type.nft")}</SelectItem>
+                  <SelectItem value="Other">{t("news.type.other")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <Label>投放时长 (小时)</Label>
+                <Label>{t("news.duration")}</Label>
                 <span className="text-xl font-bold">{formData.durationHours}</span>
               </div>
               <Slider value={[formData.durationHours]} min={1} max={168} step={1} onValueChange={handleSliderChange} />
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>最少1小时</span>
-                <span>最多7天 (168小时)</span>
+                <span>{t("news.min.duration")}</span>
+                <span>{t("news.max.duration")}</span>
               </div>
             </div>
 
             <div className="space-y-2 p-4 rounded-lg bg-muted">
               <div className="flex items-center justify-between">
-                <span>基础费率</span>
-                <span>${formData.hourlyRate}/小时</span>
+                <span>{t("news.basic.rate")}</span>
+                <span>${formData.hourlyRate}/{t("news.per.hour")}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>投放时长</span>
-                <span>{formData.durationHours}小时</span>
+                <span>{t("news.duration")}</span>
+                <span>{formData.durationHours} {t("news.per.hour")}</span>
               </div>
               <div className="flex items-center justify-between font-bold">
-                <span>预计总费用</span>
+                <span>{t("news.total.cost")}</span>
                 <span>${(formData.hourlyRate * formData.durationHours).toFixed(2)} USD</span>
               </div>
               <div className="text-xs text-muted-foreground mt-2">
-                注意：费用将按照智能合约中的汇率转换为ETH进行支付
+                {t("news.note")}
               </div>
             </div>
 

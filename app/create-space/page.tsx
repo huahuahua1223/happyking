@@ -12,7 +12,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { useContracts } from "@/hooks/use-contracts"
 import { useWallet } from "@/hooks/use-wallet"
 import { SPACE_TYPE_LABELS, SpaceType } from "@/lib/constants"
-import { getTechnicalErrorDetails, getUserFriendlyError } from "@/lib/error-handler"
+import { getTechnicalErrorDetails } from "@/lib/error-handler"
+import { getUserFriendlyError as getErrorMessage } from "@/lib/error-handler"
 import { useLanguage } from "@/lib/i18n/context"
 import { createSpace } from "@/services/space-service"
 import { uploadToWalrus } from "@/services/upload-service"
@@ -26,6 +27,11 @@ export default function CreateSpacePage() {
   const { isConnected } = useWallet()
   const { space } = useContracts()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { t } = useLanguage()
+  
+  // 本地化的错误处理辅助函数
+  const getUserFriendlyError = (error: any, errorType = "unknown") => 
+    getErrorMessage(error, errorType, t)
 
   const [formData, setFormData] = useState({
     title: "",
@@ -41,7 +47,6 @@ export default function CreateSpacePage() {
   const [uploadProgress, setUploadProgress] = useState(0)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
-  const { t } = useLanguage()
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -81,23 +86,23 @@ export default function CreateSpacePage() {
     // 验证文件类型
     const spaceTypeNum = Number(formData.spaceType)
     if (spaceTypeNum === SpaceType.MEME && !file.type.startsWith("image/")) {
-      setUploadError(getUserFriendlyError(null, "invalid_file_type", t))
+      setUploadError(getUserFriendlyError(null, "invalid_file_type"))
       return
     }
 
     if (spaceTypeNum === SpaceType.VIDEO && !file.type.startsWith("video/")) {
-      setUploadError(getUserFriendlyError(null, "invalid_file_type", t))
+      setUploadError(getUserFriendlyError(null, "invalid_file_type"))
       return
     }
 
     // 验证文件大小
     if (spaceTypeNum === SpaceType.VIDEO && file.size > 50 * 1024 * 1024) {
-      setUploadError(getUserFriendlyError(null, "file_too_large_video", t))
+      setUploadError(getUserFriendlyError(null, "file_too_large_video"))
       return
     }
 
     if (spaceTypeNum === SpaceType.MEME && file.size > 5 * 1024 * 1024) {
-      setUploadError(getUserFriendlyError(null, "file_too_large", t))
+      setUploadError(getUserFriendlyError(null, "file_too_large"))
       return
     }
 
@@ -114,6 +119,7 @@ export default function CreateSpacePage() {
             setUploadProgress(progress)
           }
         },
+        undefined, // 不使用status回调
         t,
       )
 
@@ -163,7 +169,7 @@ export default function CreateSpacePage() {
           }
         } catch (error) {
           console.error("创建空间失败:", getTechnicalErrorDetails(error))
-          const errorMessage = error instanceof Error ? error.message : getUserFriendlyError(error, "contract_error", t)
+          const errorMessage = error instanceof Error ? error.message : getUserFriendlyError(error, "contract_error")
           setUploadError(`创建空间失败: ${errorMessage}`)
         } finally {
           setIsSubmitting(false)
@@ -185,7 +191,7 @@ export default function CreateSpacePage() {
       }
 
       // 使用友好的错误消息
-      const errorMessage = error instanceof Error ? error.message : getUserFriendlyError(error, errorType, t)
+      const errorMessage = error instanceof Error ? error.message : getUserFriendlyError(error, errorType)
       setUploadError(`文件上传失败: ${errorMessage}`)
     } finally {
       setIsUploading(false)
@@ -311,11 +317,11 @@ export default function CreateSpacePage() {
         }
       } catch (error) {
         console.error("上传文本内容失败详情:", getTechnicalErrorDetails(error))
-        throw new Error(getUserFriendlyError(error, "upload_failed", t))
+        throw new Error(getUserFriendlyError(error, "upload_failed"))
       }
     } catch (error) {
       console.error("创建空间过程中出错:", getTechnicalErrorDetails(error))
-      const errorMessage = error instanceof Error ? error.message : getUserFriendlyError(error, "unknown", t)
+      const errorMessage = error instanceof Error ? error.message : getUserFriendlyError(error, "unknown")
       console.error(`空间创建失败: ${errorMessage}`)
     } finally {
       setIsSubmitting(false)
@@ -395,24 +401,24 @@ export default function CreateSpacePage() {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="name">{t("space.token_name")} (Optional)</Label>
+              <Label htmlFor="name">{t("space.token.name")}</Label>
               <Input
                 id="name"
                 name="name"
                 value={formData.name}
                 onChange={handleChange}
-                placeholder={t("space.token_name.placeholder")}
+                placeholder={t("space.token.name.placeholder")}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="symbol">{t("space.token_symbol")} (Optional)</Label>
+              <Label htmlFor="symbol">{t("space.token.symbol")}</Label>
               <Input
                 id="symbol"
                 name="symbol"
                 value={formData.symbol}
                 onChange={handleChange}
-                placeholder={t("space.token_symbol.placeholder")}
+                placeholder={t("space.token.symbol.placeholder")}
                 maxLength={5}
               />
             </div>

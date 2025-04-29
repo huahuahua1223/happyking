@@ -1,10 +1,8 @@
-"use client"
-
 /**
  * 错误处理工具
  * Error handling utilities
  */
-import { useLanguage } from "@/lib/i18n/context"
+import { type TFunction } from "@/lib/i18n/types"
 
 // 定义错误类型和对应的用户友好消息键
 // Define error types and corresponding user-friendly message keys
@@ -116,17 +114,4 @@ export function getTechnicalErrorDetails(error: any): string {
   }
 
   return details || String(error)
-}
-
-/**
- * 错误处理钩子
- * Error handling hook
- */
-export function useErrorHandler() {
-  const { t } = useLanguage()
-
-  return {
-    getUserFriendlyError: (error: any, errorType = "unknown") => getUserFriendlyError(error, errorType, t),
-    getTechnicalErrorDetails,
-  }
 }

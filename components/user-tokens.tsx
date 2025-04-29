@@ -5,8 +5,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ArrowUpRight } from "lucide-react"
 import Image from "next/image"
+import { useLanguage } from "@/lib/i18n/context"
 
 export function UserTokens() {
+  const { t } = useLanguage()
+
   const tokens = [
     {
       id: 1,
@@ -55,19 +58,19 @@ export function UserTokens() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <Card>
           <CardContent className="p-6">
-            <div className="text-sm text-muted-foreground mb-2">总代币价值</div>
+            <div className="text-sm text-muted-foreground mb-2">{t("user.total.value")}</div>
             <div className="text-3xl font-bold">$120.08</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
-            <div className="text-sm text-muted-foreground mb-2">代币种类</div>
+            <div className="text-sm text-muted-foreground mb-2">{t("user.token.types")}</div>
             <div className="text-3xl font-bold">4</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-6">
-            <div className="text-sm text-muted-foreground mb-2">总代币数量</div>
+            <div className="text-sm text-muted-foreground mb-2">{t("user.token.count")}</div>
             <div className="text-3xl font-bold">2,000</div>
           </CardContent>
         </Card>
@@ -94,32 +97,32 @@ export function UserTokens() {
 
               <div className="space-y-3">
                 <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">余额:</span>
+                  <span className="text-sm text-muted-foreground">{t("user.balance")}:</span>
                   <span className="font-medium">{token.balance}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">价值:</span>
+                  <span className="text-sm text-muted-foreground">{t("user.value")}:</span>
                   <span className="font-medium">{token.value}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">价格:</span>
+                  <span className="text-sm text-muted-foreground">{t("user.price")}:</span>
                   <span className="font-medium">{token.price}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">24h变化:</span>
+                  <span className="text-sm text-muted-foreground">{t("user.change")}:</span>
                   <Badge variant={token.change.startsWith("+") ? "default" : "destructive"}>{token.change}</Badge>
                 </div>
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <Button variant="outline" size="sm">
-                  买入
+                  {t("user.buy")}
                 </Button>
-                <Button size="sm">卖出</Button>
+                <Button size="sm">{t("user.sell")}</Button>
               </div>
 
               <Button variant="ghost" size="sm" className="w-full mt-2 flex items-center justify-center gap-1">
-                <span>查看详情</span>
+                <span>{t("user.details")}</span>
                 <ArrowUpRight className="h-3 w-3" />
               </Button>
             </CardContent>

@@ -16,12 +16,16 @@ export interface LanguageOption {
   flag?: string // 可选的国旗图标 (Optional flag icon)
 }
 
+// 翻译函数类型
+// Translation function type 
+export type TFunction = (key: string, params?: Record<string, string | number>) => string
+
 // 语言上下文接口
 // Language context interface
 export interface LanguageContextType {
   language: SupportedLanguage
   setLanguage: (lang: SupportedLanguage) => void
-  t: (key: string, params?: Record<string, string | number>) => string
+  t: TFunction
   availableLanguages: LanguageOption[]
 }
 

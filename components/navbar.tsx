@@ -138,7 +138,7 @@ export default function Navbar() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel>{t("user.profile")}</DropdownMenuLabel>
+              {/* <DropdownMenuLabel>{t("user.profile")}</DropdownMenuLabel> */}
               <DropdownMenuSeparator />
               <Link href="/user">
                 <DropdownMenuItem>

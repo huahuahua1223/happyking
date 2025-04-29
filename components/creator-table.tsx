@@ -3,8 +3,11 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useLanguage } from "@/lib/i18n/context"
 
 export function CreatorTable() {
+  const { t } = useLanguage()
+
   const creators = [
     {
       rank: 1,
@@ -52,11 +55,11 @@ export function CreatorTable() {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[80px]">排名</TableHead>
-          <TableHead>创作者</TableHead>
-          <TableHead className="text-right">总内容数</TableHead>
-          <TableHead className="text-right">总金额</TableHead>
-          <TableHead className="text-right">变化</TableHead>
+          <TableHead className="w-[80px]">{t("dashboard.rank")}</TableHead>
+          <TableHead>{t("dashboard.creator")}</TableHead>
+          <TableHead className="text-right">{t("dashboard.content.count")}</TableHead>
+          <TableHead className="text-right">{t("dashboard.total.amount")}</TableHead>
+          <TableHead className="text-right">{t("dashboard.change")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
