@@ -3,8 +3,11 @@
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import Image from "next/image"
+import { useLanguage } from "@/lib/i18n/context"
 
 export function UserNFTs() {
+  const { t } = useLanguage()
+
   const nfts = [
     {
       id: 1,
@@ -51,17 +54,17 @@ export function UserNFTs() {
             <h3 className="font-bold mb-2">{nft.name}</h3>
             <div className="flex flex-col gap-1 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">系列:</span>
+                <span className="text-muted-foreground">{t("user.collection")}:</span>
                 <span>{nft.collection}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">稀有度:</span>
+                <span className="text-muted-foreground">{t("user.rarity")}:</span>
                 <Badge variant={nft.rarity === "传奇" ? "default" : nft.rarity === "稀有" ? "secondary" : "outline"}>
                   {nft.rarity}
                 </Badge>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">区块链:</span>
+                <span className="text-muted-foreground">{t("user.blockchain")}:</span>
                 <span>{nft.chain}</span>
               </div>
             </div>

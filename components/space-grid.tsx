@@ -11,6 +11,7 @@ import { Flame, Loader2, MessageSquare, ThumbsUp } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { useEffect, useState } from "react"
+import { useLanguage } from "@/lib/i18n/context"
 
 // 在文件顶部添加AGGREGATOR_URL导入
 import { AGGREGATOR_URL } from "@/lib/constants"
@@ -33,6 +34,7 @@ interface SpaceData {
 const walrusContentCache = new Map<string, any>()
 
 export default function SpaceGrid() {
+  const { t } = useLanguage()
   const [hoveredVideo, setHoveredVideo] = useState<number | null>(null)
   const [spaces, setSpaces] = useState<SpaceData[]>([])
   const [loading, setLoading] = useState(true)
@@ -175,10 +177,10 @@ export default function SpaceGrid() {
     <div className="space-y-6">
       <Tabs defaultValue="all" className="w-full">
         <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="all">全部</TabsTrigger>
-          <TabsTrigger value="video">视频</TabsTrigger>
-          <TabsTrigger value="meme">Meme</TabsTrigger>
-          <TabsTrigger value="text">文字</TabsTrigger>
+          <TabsTrigger value="all">{t("space.all")}</TabsTrigger>
+          <TabsTrigger value="video">{t("space.type.video")}</TabsTrigger>
+          <TabsTrigger value="meme">{t("space.type.meme")}</TabsTrigger>
+          <TabsTrigger value="text">{t("space.type.text")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="all" className="mt-6">

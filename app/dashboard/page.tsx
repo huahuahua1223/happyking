@@ -1,40 +1,45 @@
+"use client"
+
 import { CreatorTable } from "@/components/creator-table"
 import { HeatTable } from "@/components/heat-table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { BarChart3, Coins, DollarSign, Flame, Hash, Newspaper, PiggyBank, Users, Wallet } from "lucide-react"
 import type React from "react"
+import { useLanguage } from "@/lib/i18n/context"
 
 export default function DashboardPage() {
+  const { t } = useLanguage()
+
   return (
     <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-8">仪表板</h1>
+      <h1 className="text-3xl font-bold mb-8">{t("nav.dashboard")}</h1>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-8">
-        <MetricCard title="总内容数量" value="12,345" icon={<BarChart3 className="h-4 w-4 text-muted-foreground" />} />
-        <MetricCard title="总用户数量" value="5,678" icon={<Users className="h-4 w-4 text-muted-foreground" />} />
-        <MetricCard title="总收入" value="$98,765" icon={<Wallet className="h-4 w-4 text-muted-foreground" />} />
-        <MetricCard title="当前热度值" value="87.5" icon={<Flame className="h-4 w-4 text-muted-foreground" />} />
-        <MetricCard title="热度第一空间" value="#42069" icon={<Hash className="h-4 w-4 text-muted-foreground" />} />
-        <MetricCard title="总Token数量" value="1,000,000" icon={<Coins className="h-4 w-4 text-muted-foreground" />} />
-        <MetricCard title="Dapp利润" value="$45,678" icon={<PiggyBank className="h-4 w-4 text-muted-foreground" />} />
+        <MetricCard title={t("dashboard.total.content")} value="12,345" icon={<BarChart3 className="h-4 w-4 text-muted-foreground" />} />
+        <MetricCard title={t("dashboard.total.users")} value="5,678" icon={<Users className="h-4 w-4 text-muted-foreground" />} />
+        <MetricCard title={t("dashboard.total.revenue")} value="$98,765" icon={<Wallet className="h-4 w-4 text-muted-foreground" />} />
+        <MetricCard title={t("dashboard.current.heat")} value="87.5" icon={<Flame className="h-4 w-4 text-muted-foreground" />} />
+        <MetricCard title={t("dashboard.top.heat")} value="#42069" icon={<Hash className="h-4 w-4 text-muted-foreground" />} />
+        <MetricCard title={t("dashboard.total.tokens")} value="1,000,000" icon={<Coins className="h-4 w-4 text-muted-foreground" />} />
+        <MetricCard title={t("dashboard.dapp.profit")} value="$45,678" icon={<PiggyBank className="h-4 w-4 text-muted-foreground" />} />
         <MetricCard
-          title="内容总收入"
+          title={t("dashboard.content.revenue")}
           value="$76,543"
           icon={<DollarSign className="h-4 w-4 text-muted-foreground" />}
         />
-        <MetricCard title="新闻总收入" value="$23,456" icon={<Newspaper className="h-4 w-4 text-muted-foreground" />} />
+        <MetricCard title={t("dashboard.news.revenue")} value="$23,456" icon={<Newspaper className="h-4 w-4 text-muted-foreground" />} />
       </div>
 
       <Tabs defaultValue="volume" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="volume">按收入排名</TabsTrigger>
-          <TabsTrigger value="heat">按热度排名</TabsTrigger>
+          <TabsTrigger value="volume">{t("dashboard.by.revenue")}</TabsTrigger>
+          <TabsTrigger value="heat">{t("dashboard.by.heat")}</TabsTrigger>
         </TabsList>
         <TabsContent value="volume" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>创作者收入排行榜</CardTitle>
+              <CardTitle>{t("dashboard.creator.ranking")}</CardTitle>
             </CardHeader>
             <CardContent>
               <CreatorTable />
@@ -44,7 +49,7 @@ export default function DashboardPage() {
         <TabsContent value="heat" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>空间热度排行榜</CardTitle>
+              <CardTitle>{t("dashboard.space.ranking")}</CardTitle>
             </CardHeader>
             <CardContent>
               <HeatTable />

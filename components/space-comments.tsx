@@ -141,6 +141,7 @@ export function SpaceComments({ spaceId }: { spaceId: number }) {
         setLoadError(null)
 
         // 从区块链获取评论数据
+        console.log(`尝试从链上获取评论，spaceId: ${spaceId}`)
         const chainComments = await getSpaceComments(space, spaceId)
         console.log("从链上获取的评论:", chainComments)
 
@@ -157,17 +158,24 @@ export function SpaceComments({ spaceId }: { spaceId: number }) {
         }
       } catch (error) {
         console.error("加载评论失败:", error)
-        setLoadError("加载评论失败，使用默认数据")
+        setLoadError(`加载评论失败: ${error instanceof Error ? error.message : '未知错误'}`)
         // 出错时使用假数据
         setComments(MOCK_COMMENTS)
         setUseRealData(false)
+        
+        // 显示错误通知
+        toast({
+          title: "评论加载失败",
+          description: "无法从区块链获取评论数据，使用默认数据",
+          variant: "destructive",
+        })
       } finally {
         setIsLoading(false)
       }
     }
 
     loadComments()
-  }, [space, spaceId])
+  }, [space, spaceId, toast])
 
   // 处理评论提交
   const handleSubmitComment = async () => {
@@ -312,7 +320,9 @@ export function SpaceComments({ spaceId }: { spaceId: number }) {
                     </div>
                     <div className="text-sm text-muted-foreground">{comment.time}</div>
                   </div>
-                  <p className="mt-1">{comment.content}</p>
+                  <p className={`mt-1 ${comment.content?.includes('可能已被删除') ? 'text-muted-foreground italic' : ''}`}>
+                    {comment.content}
+                  </p>
                   <div className="flex items-center gap-4 mt-2">
                     <Button variant="ghost" size="sm" className="flex items-center gap-1 h-8 px-2">
                       <ThumbsUp className="h-4 w-4" />
@@ -374,7 +384,9 @@ export function SpaceComments({ spaceId }: { spaceId: number }) {
           <div className="text-center py-8 text-muted-foreground">暂无评论，快来发表第一条评论吧！</div>
         )}
 
-        {loadError && <div className="text-center text-sm text-muted-foreground">{loadError}</div>}
+        {loadError && (
+          <div className="text-center text-sm text-red-500 mb-4">{loadError}</div>
+        )}
 
         {/* 数据来源提示 */}
         <div className="text-center text-xs text-muted-foreground mt-4">

@@ -251,44 +251,67 @@ export async function getSpaceComments(spaceContract: any, spaceId: number) {
     }
 
     // 处理事件数据
-    const comments = await Promise.all(
-      events.map(async (event, index) => {
-        try {
-          const { user, walrusBlobId, timestamp } = event.args || {}
+    const commentsPromises = events.map(async (event: any, index: number) => {
+      try {
+        const { user, walrusBlobId, timestamp } = event.args || {}
 
-          // 从Walrus获取评论内容
-          let commentContent = { content: "评论内容无法加载" }
-          try {
-            if (walrusBlobId) {
-              commentContent = await fetchCommentContent(walrusBlobId)
-            }
-          } catch (contentError) {
-            console.error(`获取评论内容失败:`, contentError)
-          }
-
-          return {
-            id: index,
-            user: user || "未知用户",
-            avatar: "/abstract-user-icon.png", // 默认头像
-            content: commentContent.content || "评论内容无法加载",
-            likes: 0, // 目前合约不支持评论点赞
-            dislikes: 0,
-            time: formatTimestamp(Number(timestamp || Date.now())),
-            replies: [], // 目前合约不支持评论回复
-            timestamp: Number(timestamp || Date.now()), // 用于排序
-          }
-        } catch (eventError) {
-          console.error(`处理评论事件 ${index} 失败:`, eventError)
+        // 检查blobId是否有效
+        if (!walrusBlobId || typeof walrusBlobId !== 'string' || walrusBlobId.trim() === '') {
+          console.log(`评论 ${index} 的blobId无效: ${walrusBlobId}`)
           return null
         }
-      }),
-    )
 
-    // 过滤掉处理失败的评论并按时间倒序排序
-    const validComments = comments.filter((comment) => comment !== null)
-    validComments.sort((a, b) => b.timestamp - a.timestamp)
+        // 从Walrus获取评论内容
+        let commentContent;
+        try {
+          if (walrusBlobId) {
+            commentContent = await fetchCommentContent(walrusBlobId)
+            
+            // 检查返回的内容是否有效
+            if (!commentContent || !commentContent.content || commentContent.error) {
+              console.log(`评论 ${index} 的内容无效或有错误: ${walrusBlobId}`)
+              return null
+            }
+          } else {
+            return null
+          }
+        } catch (contentError) {
+          console.error(`获取评论内容失败:`, contentError)
+          return null
+        }
 
-    return validComments
+        return {
+          id: index,
+          user: user || "未知用户",
+          avatar: "/abstract-user-icon.png", // 默认头像
+          content: commentContent.content,
+          likes: 0, // 目前合约不支持评论点赞
+          dislikes: 0,
+          time: formatTimestamp(Number(timestamp || Date.now())),
+          replies: [], // 目前合约不支持评论回复
+          timestamp: Number(timestamp || Date.now()), // 用于排序
+          blobId: walrusBlobId, // 保存blobId用于调试
+        }
+      } catch (eventError) {
+        console.error(`处理评论事件 ${index} 失败:`, eventError)
+        return null
+      }
+    });
+
+    // 使用Promise.allSettled来确保即使某些评论获取失败，也不会中断整个评论列表的加载
+    const commentsResults = await Promise.allSettled(commentsPromises);
+    
+    // 过滤出成功获取的评论
+    const validComments = commentsResults
+      .filter((result): result is PromiseFulfilledResult<any> => 
+        result.status === 'fulfilled' && result.value !== null)
+      .map(result => result.value);
+
+    // 按时间倒序排序
+    validComments.sort((a, b) => b.timestamp - a.timestamp);
+
+    console.log(`成功加载 ${validComments.length} 条有效评论（共 ${events.length} 条）`);
+    return validComments;
   } catch (error) {
     console.error(`获取空间 ${spaceId} 的评论数据失败:`, error)
     return []
@@ -298,21 +321,41 @@ export async function getSpaceComments(spaceContract: any, spaceId: number) {
 // 从Walrus获取评论内容
 async function fetchCommentContent(blobId:string) {
   try {
+    // 记录正在尝试获取的blobId
+    console.log(`尝试获取评论内容, 原始blobId: ${blobId}`)
+    
+    // 检查blobId格式
+    if (!blobId || typeof blobId !== 'string' || blobId.trim() === '') {
+      console.error('无效的blobId:', blobId)
+      return { content: "无效的评论内容ID" }
+    }
+    
     // 尝试使用getWalrusContent函数
-    return await getWalrusContent(blobId)
+    const content = await getWalrusContent(blobId)
+    
+    // 如果返回的内容带有错误信息，但仍然有内容，添加固定文本
+    if (content.error && !content.content) {
+      content.content = "此评论内容可能已被删除或无法访问。"
+    }
+    
+    return content
   } catch (error) {
     console.error(`使用getWalrusContent获取评论内容失败:`, error)
 
     // 如果getWalrusContent失败，尝试直接从聚合器获取
     try {
-      const response = await fetch(`${AGGREGATOR_URL}${blobId}`)
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+      return { 
+        content: "此评论内容无法加载，可能已被删除或暂时无法访问。",
+        error: error instanceof Error ? error.message : "未知错误"
       }
-      return await response.json()
     } catch (fetchError) {
       console.error(`直接从聚合器获取评论内容失败:`, fetchError)
-      return { content: "评论内容无法加载" }
+      
+      // 提供有意义的备用内容
+      return { 
+        content: "此评论内容可能已被删除或无法访问。",
+        error: fetchError instanceof Error ? fetchError.message : "未知错误"
+      }
     }
   }
 }

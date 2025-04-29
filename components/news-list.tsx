@@ -13,6 +13,7 @@ import { fetchJsonDataById } from "@/services/upload-service-improved"
 import { Loader2, Wallet } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
+import { useLanguage } from "@/lib/i18n/context"
 
 // 定义新闻内容的类型
 interface NewsContent {
@@ -44,6 +45,7 @@ export function NewsList() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { profile } = useUserProfile()
+  const { t } = useLanguage()
 
   useEffect(() => {
     // 更可靠地检测是否在创建页面
@@ -78,41 +80,60 @@ export function NewsList() {
             try {
               // 从Walrus获取新闻内容
               let content: NewsContent | null = null
+              
               try {
-                // 添加超时处理
-                const fetchPromise = fetchJsonDataById(item.walrusBlobId)
-                const timeoutPromise = new Promise<any>((_, reject) =>
-                  setTimeout(() => reject(new Error("获取内容超时")), 30000),
-                )
-
-                // 使用 Promise.race 确保不会无限等待
-                content = (await Promise.race([fetchPromise, timeoutPromise])) as NewsContent
-
-                // 如果内容为空对象，设置默认值
-                if (!content || Object.keys(content).length === 0) {
+                // 使用改进的fetchJsonDataById函数获取内容
+                content = await fetchJsonDataById(item.walrusBlobId, 3);
+                
+                // 检查响应中是否包含错误信息
+                if (content && content.error) {
+                  console.warn(`新闻内容包含错误 (ID: ${index + 1}):`, content.error, content.message);
                   content = {
                     title: item.title || "无标题",
-                    content: "内容加载失败",
+                    content: `内容加载失败: ${content.message || '未知错误'}`,
                     newsType: item.newsType || "未分类",
                     timestamp: Date.now(),
-                  }
+                  };
+                }
+                
+                // 如果内容为空对象或关键字段缺失，设置默认值
+                if (!content || Object.keys(content).length === 0 || !content.title) {
+                  content = {
+                    title: item.title || "无标题",
+                    content: "内容加载失败或格式不正确",
+                    newsType: item.newsType || "未分类",
+                    timestamp: Date.now(),
+                  };
                 }
               } catch (contentError) {
-                console.error(`获取新闻内容失败 (ID: ${index + 1}):`, contentError)
+                console.error(`获取新闻内容失败 (ID: ${index + 1}):`, contentError);
+                
+                // 提供更具体的错误消息
+                let errorMessage = "内容加载失败";
+                if (contentError instanceof Error) {
+                  if (contentError.message.includes("超时")) {
+                    errorMessage = "内容加载超时，服务器响应过慢";
+                  } else if (contentError.message.includes("404")) {
+                    errorMessage = "内容不存在或已被删除";
+                  } else {
+                    errorMessage = `加载失败: ${contentError.message}`;
+                  }
+                }
+                
                 content = {
                   title: item.title || "无标题",
-                  content: "内容加载失败",
+                  content: errorMessage,
                   newsType: item.newsType || "未分类",
                   timestamp: Date.now(),
-                }
+                };
               }
 
               // 计算持续时间的显示格式
-              const durationText = `${item.durationHours}小时`
+              const durationText = `${item.durationHours}小时`;
 
               // 格式化日期
-              const date = new Date(content?.timestamp || Date.now())
-              const dateText = date.toISOString().split("T")[0]
+              const date = new Date(content?.timestamp || Date.now());
+              const dateText = date.toISOString().split("T")[0];
 
               return {
                 id: index + 1, // 使用索引作为ID
@@ -125,9 +146,10 @@ export function NewsList() {
                 date: dateText,
                 content: content?.content || "内容加载失败",
                 walrusBlobId: item.walrusBlobId,
-              }
+                loadError: content?.error ? true : false,
+              };
             } catch (itemError) {
-              console.error(`处理新闻项失败 (ID: ${index + 1}):`, itemError)
+              console.error(`处理新闻项失败 (ID: ${index + 1}):`, itemError);
               return {
                 id: index + 1,
                 title: item.title || "无标题",
@@ -137,12 +159,13 @@ export function NewsList() {
                 duration: `${item.durationHours}小时`,
                 type: item.newsType || "未分类",
                 date: new Date().toISOString().split("T")[0],
-                content: "内容加载失败",
+                content: itemError instanceof Error ? `内容处理错误: ${itemError.message}` : "内容加载失败",
                 walrusBlobId: item.walrusBlobId,
-              }
+                loadError: true,
+              };
             }
-          }),
-        )
+          })
+        );
 
         setNewsItems(processedNews)
       } catch (fetchError) {
@@ -220,24 +243,27 @@ export function NewsList() {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[80px]">序号</TableHead>
-          <TableHead>标题</TableHead>
-          <TableHead>创建者</TableHead>
-          <TableHead>时长</TableHead>
-          <TableHead>类型</TableHead>
-          <TableHead className="text-right">日期</TableHead>
+          <TableHead className="w-[80px]">{t("news.number")}</TableHead>
+          <TableHead>{t("news.title")}</TableHead>
+          <TableHead>{t("news.creator")}</TableHead>
+          <TableHead>{t("news.duration")}</TableHead>
+          <TableHead>{t("news.type")}</TableHead>
+          <TableHead className="text-right">{t("news.date")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {newsItems.map((item) => (
           <TableRow
             key={item.id}
-            className="cursor-pointer hover:bg-muted/50 transition-colors"
+            className={`cursor-pointer hover:bg-muted/50 transition-colors ${item.loadError ? 'opacity-70' : ''}`}
             onClick={() => handleNewsClick(item.id)}
           >
             <TableCell className="font-medium">{item.id}</TableCell>
             <TableCell>
-              <span className="line-clamp-1">{item.title}</span>
+              <span className={`line-clamp-1 ${item.loadError ? 'text-muted-foreground italic' : ''}`}>
+                {item.title}
+                {item.loadError && <span className="ml-2 text-xs text-red-500">(加载异常)</span>}
+              </span>
             </TableCell>
             <TableCell>
               <div className="flex items-center gap-2">

@@ -4,8 +4,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Flame } from "lucide-react"
+import { useLanguage } from "@/lib/i18n/context"
 
 export function HeatTable() {
+  const { t } = useLanguage()
+
   const spaces = [
     {
       rank: 1,
@@ -53,11 +56,11 @@ export function HeatTable() {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[80px]">排名</TableHead>
-          <TableHead>创作者</TableHead>
-          <TableHead>空间号</TableHead>
-          <TableHead>空间标题</TableHead>
-          <TableHead className="text-right">热度</TableHead>
+          <TableHead className="w-[80px]">{t("dashboard.rank")}</TableHead>
+          <TableHead>{t("dashboard.creator")}</TableHead>
+          <TableHead>{t("dashboard.space.number")}</TableHead>
+          <TableHead>{t("dashboard.space.title")}</TableHead>
+          <TableHead className="text-right">{t("dashboard.heat")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

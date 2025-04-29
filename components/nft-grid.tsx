@@ -3,8 +3,11 @@
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import Image from "next/image"
+import { useLanguage } from "@/lib/i18n/context"
 
 export function NFTGrid() {
+  const { t } = useLanguage()
+
   const nfts = [
     {
       id: 1,
@@ -83,15 +86,15 @@ export function NFTGrid() {
             <h3 className="font-bold mb-2">{nft.name}</h3>
             <div className="flex flex-col gap-1 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">地板价:</span>
+                <span className="text-muted-foreground">{t("tokens.floor.price")}:</span>
                 <span>{nft.floor}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">总数量:</span>
+                <span className="text-muted-foreground">{t("tokens.items")}:</span>
                 <span>{nft.items}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">总交易量:</span>
+                <span className="text-muted-foreground">{t("tokens.volume")}:</span>
                 <Badge variant="secondary">{nft.volume}</Badge>
               </div>
             </div>

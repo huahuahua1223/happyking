@@ -371,7 +371,8 @@ async function uploadLargeFile(
     }
 
     const MAX_CHUNK_RETRIES = 3
-    let updatedChunk = { ...chunk, status: "uploading" as const }
+    // 使用类型断言
+    let updatedChunk: ChunkStatus = { ...chunk, status: "uploading" }
 
     try {
       const fileSlice = file.slice(chunk.start, chunk.end)
@@ -685,16 +686,69 @@ export async function uploadJsonData(data: object): Promise<string> {
   throw new Error("error.upload_failed")
 }
 
+// 辅助函数：规范化Walrus blobId
+function normalizeWalrusBlobId(blobId: string): string {
+  if (!blobId) return '';
+  
+  // 移除开头的斜杠
+  let normalized = blobId.startsWith('/') ? blobId.substring(1) : blobId;
+  
+  // 移除可能包含的URL部分
+  if (normalized.includes('aggregator.walrus')) {
+    try {
+      const url = new URL(normalized);
+      normalized = url.pathname.split('/').pop() || '';
+    } catch (e) {
+      // 如果不是有效URL，保持原样
+    }
+  }
+  
+  // 如果是路径格式，提取最后一部分
+  if (normalized.includes('/')) {
+    normalized = normalized.split('/').pop() || '';
+  }
+  
+  return normalized.trim();
+}
+
 // 查询数据
 export async function fetchDataById(blobId: string): Promise<ArrayBuffer> {
   try {
-    const response = await axios.get(`${AGGREGATOR_URL}${blobId}`, {
+    // 规范化blobId
+    const normalizedBlobId = normalizeWalrusBlobId(blobId);
+    
+    console.log(`从Walrus获取数据, 原始blobId: ${blobId}`);
+    console.log(`规范化后的blobId: ${normalizedBlobId}`);
+    
+    // 检查blobId格式
+    if (!normalizedBlobId) {
+      console.error('无效的blobId:', blobId);
+      throw new Error('无效的blobId');
+    }
+    
+    const fullUrl = `${AGGREGATOR_URL}${normalizedBlobId}`;
+    console.log(`完整URL: ${fullUrl}`);
+    
+    const response = await axios.get(fullUrl, {
       responseType: "arraybuffer",
-    })
-    return response.data
+      timeout: 15000, // 增加超时时间到15秒
+    });
+    return response.data;
   } catch (error) {
-    console.error("Error fetching data:", error)
-    throw error
+    console.error(`从Walrus获取数据失败: ${blobId}`, error);
+    
+    // 提供更详细的错误信息
+    if (axios.isAxiosError(error)) {
+      if (error.response) {
+        console.error(`HTTP错误: ${error.response.status} - URL: ${AGGREGATOR_URL}${blobId}`);
+      } else if (error.request) {
+        console.error(`请求发送但未收到响应: ${error.message}`);
+      } else {
+        console.error(`请求配置错误: ${error.message}`);
+      }
+    }
+    
+    throw error;
   }
 }
 
@@ -734,24 +788,57 @@ export function cancelUpload(): void {
 
 export async function getWalrusContent(blobId: string): Promise<any> {
   try {
-    console.log(`从Walrus获取内容: ${blobId}`)
-
+    // 规范化blobId
+    const normalizedBlobId = normalizeWalrusBlobId(blobId);
+    
+    if (!normalizedBlobId) {
+      console.error('无效的blobId:', blobId);
+      return { error: "无效的内容ID", text: "内容无法加载" };
+    }
+    
+    console.log(`从Walrus获取内容: 原始blobId=${blobId}, 规范化blobId=${normalizedBlobId}`);
+    
     // 获取原始数据
-    const buffer = await fetchDataById(blobId)
-    const text = new TextDecoder().decode(buffer)
-
     try {
-      // 尝试解析为JSON
-      const jsonData = JSON.parse(text)
-      console.log(`成功解析为JSON: ${blobId}`, jsonData)
-      return jsonData
-    } catch (e) {
-      // 如果不是JSON，则返回文本
-      console.log(`不是JSON，返回文本: ${blobId}`)
-      return { text }
+      const buffer = await fetchDataById(normalizedBlobId);
+      const text = new TextDecoder().decode(buffer);
+
+      try {
+        // 尝试解析为JSON
+        const jsonData = JSON.parse(text);
+        console.log(`成功解析为JSON: ${normalizedBlobId}`);
+        return jsonData;
+      } catch (e) {
+        // 如果不是JSON，则返回文本
+        console.log(`不是JSON，返回文本: ${normalizedBlobId}`);
+        return { text };
+      }
+    } catch (fetchError) {
+      // 捕获并记录fetchDataById的错误
+      console.error(`从Walrus获取内容失败(fetchDataById): ${normalizedBlobId}`, fetchError);
+      
+      if (axios.isAxiosError(fetchError) && fetchError.response?.status === 404) {
+        return { 
+          error: "内容不存在或已被删除", 
+          text: "此内容可能已被删除或暂时无法访问",
+          originalBlobId: blobId,
+          normalizedBlobId
+        };
+      }
+      
+      return { 
+        error: fetchError instanceof Error ? fetchError.message : "未知错误", 
+        text: "内容加载失败",
+        originalBlobId: blobId,
+        normalizedBlobId
+      };
     }
   } catch (error) {
-    console.error(`从Walrus获取内容失败: ${blobId}`, error)
-    throw error
+    console.error(`从Walrus获取内容失败(总体): ${blobId}`, error);
+    return { 
+      error: error instanceof Error ? error.message : "未知错误", 
+      text: "内容加载失败",
+      originalBlobId: blobId
+    };
   }
 }

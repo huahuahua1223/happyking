@@ -404,7 +404,7 @@ export default function EditUserPage() {
           </CardContent>
           <CardFooter className="flex justify-end gap-2">
             <Button variant="outline" type="button" onClick={() => router.push("/user")}>
-              {t("cancel")}
+              {t("user.cancel")}
             </Button>
             <Button type="submit" disabled={isSubmitting || isUploading}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
