@@ -138,7 +138,7 @@ export default function SpaceDetailPage({ params }: { params: SpaceParams }) {
           creatorAddress: spaceItem.creator,
           avatar: "/abstract-user-icon.png", // Default avatar
           type: SPACE_TYPE_LABELS[spaceItem.spaceType as SpaceType] || "未知类型",
-          typeNumber: spaceItem.spaceType,
+          typeNumber: Number(spaceItem.spaceType),
           walrusBlobId: spaceItem.walrusBlobId,
           content: content.content,
           description: content.description,
