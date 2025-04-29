@@ -27,7 +27,7 @@ import {
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import React, { useEffect, useState } from "react"
 
 // Define content interface
 interface ISpaceContent {
@@ -37,7 +37,16 @@ interface ISpaceContent {
   timestamp?: number
 }
 
-export default function SpaceDetailPage({ params }: { params: { id: string } }) {
+// 定义 params 接口
+interface SpaceParams {
+  id: string;
+}
+
+export default function SpaceDetailPage({ params }: { params: SpaceParams }) {
+  // 使用 React.use() 解包 params
+  const unwrappedParams = React.use(params as any) as SpaceParams
+  const spaceId = unwrappedParams.id
+  
   const router = useRouter()
   const { space } = useContracts()
   const { isConnected, address } = useWallet()
@@ -74,7 +83,7 @@ export default function SpaceDetailPage({ params }: { params: { id: string } }) 
         setLoading(true)
         setError(null)
 
-        const parsedSpaceId = Number.parseInt(params.id)
+        const parsedSpaceId = Number.parseInt(spaceId)
         if (isNaN(parsedSpaceId)) {
           throw new Error("无效的空间ID")
         }
@@ -123,7 +132,7 @@ export default function SpaceDetailPage({ params }: { params: { id: string } }) 
         const dateText = date.toISOString().split("T")[0]
 
         setSpaceData({
-          id: params.id,
+          id: spaceId,
           title: spaceItem.title,
           creator: "创作者", // Default creator name
           creatorAddress: spaceItem.creator,
@@ -152,7 +161,7 @@ export default function SpaceDetailPage({ params }: { params: { id: string } }) 
     }
 
     fetchSpaceDetail()
-  }, [params.id, space, toast])
+  }, [spaceId, space, toast])
 
   // 处理点赞
   const handleLike = async () => {
@@ -169,8 +178,8 @@ export default function SpaceDetailPage({ params }: { params: { id: string } }) 
       setLikeLoading(true)
 
       // 调用点赞服务
-      const spaceId = Number(spaceData.id)
-      await likeSpace(space, spaceId)
+      const parsedSpaceId = Number(spaceData.id)
+      await likeSpace(space, parsedSpaceId)
 
       // 更新点赞数和热度
       setSpaceData((prev) => {
@@ -287,7 +296,7 @@ export default function SpaceDetailPage({ params }: { params: { id: string } }) 
                 {spaceData.description || "这个空间收集了相关的meme、视频和创意内容。欢迎分享你的作品！"}
               </p>
 
-              <div className="flex items-center justify-between">
+              <div className="flex justify-between">
                 <div className="flex items-center gap-4">
                   <Button
                     variant="ghost"
@@ -365,38 +374,10 @@ export default function SpaceDetailPage({ params }: { params: { id: string } }) 
                   </div>
                 </div>
               </div>
-
-              <div className="mt-6 pt-6 border-t">
-                <h3 className="text-lg font-bold mb-4">代币信息</h3>
-
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">代币名称</p>
-                    <p className="font-medium">{spaceData.title.substring(0, 10)} Token</p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm text-muted-foreground">当前价格</p>
-                    <p className="font-medium text-green-500">$0.0001 (新代币)</p>
-                  </div>
-
-                  <div>
-                    <p className="text-sm text-muted-foreground">市值</p>
-                    <p className="font-medium">$100</p>
-                  </div>
-
-                  <Button className="w-full">交易代币</Button>
-                </div>
-              </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className="p-6">
-              <h3 className="text-lg font-bold mb-4">相关空间</h3>
-              <SpaceRelated />
-            </CardContent>
-          </Card>
+          <SpaceRelated currentId={Number(spaceData.id)} type={spaceData.typeNumber} />
         </div>
       </div>
     </div>

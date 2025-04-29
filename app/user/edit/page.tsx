@@ -123,7 +123,7 @@ export default function EditUserPage() {
       // 更新表单数据
       setFormData((prev) => ({ ...prev, avatarBlobId: blobId }))
 
-      toast.add({
+      toast({
         title: t("user.avatar.upload.success"),
         description: t("user.avatar.upload.success.description"),
       })
@@ -131,7 +131,7 @@ export default function EditUserPage() {
       console.error("上传头像失败:", error)
       setUploadError(error instanceof Error ? error.message : t("error.upload_failed"))
 
-      toast.add({
+      toast({
         title: t("user.avatar.upload.failed"),
         description: error instanceof Error ? error.message : t("error.upload_failed"),
         variant: "destructive",
@@ -152,7 +152,7 @@ export default function EditUserPage() {
     e.preventDefault()
 
     if (!isConnected) {
-      toast.add({
+      toast({
         title: t("wallet.please.connect"),
         description: t("wallet.need.connect"),
         variant: "destructive",
@@ -161,7 +161,7 @@ export default function EditUserPage() {
     }
 
     if (!userProfile) {
-      toast.add({
+      toast({
         title: t("contract.not.loaded"),
         description: t("contract.try.again"),
         variant: "destructive",
@@ -176,7 +176,7 @@ export default function EditUserPage() {
 
       // 如果选择了新头像但还没上传完成，等待上传完成
       if (selectedAvatar && isUploading) {
-        toast.add({
+        toast({
           title: t("user.avatar.uploading"),
           description: t("user.avatar.wait"),
         })
@@ -193,7 +193,7 @@ export default function EditUserPage() {
         avatarBlobId,
       )
 
-      toast.add({
+      toast({
         title: t("user.profile.updated"),
         description: t("user.profile.updated.success"),
       })
@@ -201,7 +201,7 @@ export default function EditUserPage() {
       router.push("/user")
     } catch (error) {
       console.error("Error updating profile:", error)
-      toast.add({
+      toast({
         title: t("user.profile.update.failed"),
         description: t("user.profile.update.error"),
         variant: "destructive",
