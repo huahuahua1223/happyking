@@ -32,7 +32,7 @@ export async function createSpace(
     console.log("服务: 准备创建空间，费用:", ethers.formatEther(fee), "ETH")
 
     // 调用合约方法创建空间
-    const tx = await contract.createSpace(1, title, walrusBlobId, name, symbol, 
+    const tx = await contract.createSpace(spaceType, title, walrusBlobId, name, symbol, 
       { value: fee })
     console.log("服务: 交易已提交，等待确认:", tx.hash)
 
