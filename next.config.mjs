@@ -9,6 +9,8 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-}
+  reactStrictMode: true,
+  transpilePackages: ["@ffmpeg/ffmpeg", "@ffmpeg/util"],
+};
 
-export default nextConfig
+export default nextConfig;
