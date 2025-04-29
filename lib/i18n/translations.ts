@@ -206,7 +206,7 @@ export const translations: LanguagePack = {
     "space.video.required": "请上传短视频",
     "space.create.connect_wallet": "您需要连接钱包才能创建空间",
     "space.type.placeholder": "选择空间类型",
-
+    "space.skip_compression": "跳过压缩",
     "space.ffmpeg_loading": "正在加载 FFmpeg，请稍候...",
   "space.compressing": "正在压缩视频...",
   "space.creating": "创建空间中...",
@@ -358,11 +358,16 @@ export const translations: LanguagePack = {
     // 仪表板
     // Dashboard
     "dashboard.title": "仪表板",
-    "dashboard.total.content": "总内容数量",
+    "dashboard.total.space": "总空间数量",
     "dashboard.total.users": "总用户数量",
+    "dashboard.total.likes": "总点赞数",
     "dashboard.total.revenue": "总收入",
     "dashboard.current.heat": "当前热度值",
     "dashboard.top.heat": "热度第一空间",
+    "dashboard.text.content": "文字空间数量",
+    "dashboard.meme.content": "Meme空间数量",
+    "dashboard.video.content": "视频空间数量",
+    "dashboard.avg.heat": "平均热度值",
     "dashboard.total.tokens": "总Token数量",
     "dashboard.dapp.profit": "Dapp利润",
     "dashboard.content.revenue": "内容总收入",
@@ -577,6 +582,10 @@ export const translations: LanguagePack = {
     "space.video.required": "Please upload a short video",
     "space.create.connect_wallet": "You need to connect your wallet to create a space",
     "space.type.placeholder": "Select spaceType",
+    "space.skip_compression": "Skip Compression",
+    "space.ffmpeg_loading": "Loading FFmpeg...",
+    "space.compressing": "Compressing...",
+    "space.creating": "Creating...",
 
     // 评论
     // Comments
@@ -720,11 +729,16 @@ export const translations: LanguagePack = {
 
     // Dashboard
     "dashboard.title": "Dashboard",
-    "dashboard.total.content": "Total Content Count",
+    "dashboard.total.space": "Total Content Count",
     "dashboard.total.users": "Total User Count",
+    "dashboard.total.likes": "Total Likes Count",
     "dashboard.total.revenue": "Total Revenue",
     "dashboard.current.heat": "Current Heat Value",
     "dashboard.top.heat": "Top Heat Space",
+    "dashboard.text.content": "Text Space Count",
+    "dashboard.meme.content": "Meme Space Count",
+    "dashboard.video.content": "Video Space Count",
+    "dashboard.avg.heat": "Average Heat Value",
     "dashboard.total.tokens": "Total Token Count",
     "dashboard.dapp.profit": "Dapp Profit",
     "dashboard.content.revenue": "Content Revenue",
