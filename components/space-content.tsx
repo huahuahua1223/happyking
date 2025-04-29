@@ -59,14 +59,15 @@ export function SpaceContent({ spaceData }: SpaceContentProps) {
         return (
           <div className="relative aspect-video">
             <Image
-              src={`${AGGREGATOR_URL}${spaceData.walrusBlobId}`}
+              src={`${AGGREGATOR_URL}/${spaceData.walrusBlobId}`}
               alt={spaceData.title}
               fill
               className="object-contain"
-              // onError={(e) => {
-              //   // Fallback image if the blob fails to load
-              //   e.currentTarget.src = "/distracted-boyfriend-generic.png"
-              // }}
+              onError={(e) => {
+                // Fallback image if the blob fails to load
+                e.currentTarget.src = "/martial-arts-master-humor.png"
+              }}
+              unoptimized
             />
           </div>
         )
@@ -75,14 +76,15 @@ export function SpaceContent({ spaceData }: SpaceContentProps) {
         return (
           <div className="relative aspect-video">
             <Image
-              src={`${AGGREGATOR_URL}${spaceData.walrusBlobId}`}
+              src={`${AGGREGATOR_URL}/${spaceData.walrusBlobId}`}
               alt={spaceData.title}
               fill
               className="object-cover"
-              // onError={(e) => {
-              //   // Fallback image if the blob fails to load
-              //   e.currentTarget.src = "/abstract-user-icon.png"
-              // }}
+              onError={(e) => {
+                // Fallback image if the blob fails to load
+                e.currentTarget.src = "/martial-arts-master-humor.png"
+              }}
+              unoptimized
             />
             <div
               className="absolute inset-0 flex items-center justify-center cursor-pointer"

@@ -376,7 +376,7 @@ export default function EditUserPage() {
                   <div className="space-y-2">
                     <div className="mx-auto w-24 h-24 rounded-full relative overflow-hidden">
                       <Image
-                        src={`${AGGREGATOR_URL}${profile.avatarBlobId}`}
+                        src={`${AGGREGATOR_URL}/${profile.avatarBlobId}`}
                         alt="Current avatar"
                         fill
                         className="object-cover"

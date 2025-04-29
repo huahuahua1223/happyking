@@ -81,7 +81,7 @@ export default function UserPage() {
             <div className="flex flex-col md:flex-row gap-6 items-start md:items-end -mt-12">
               <Avatar className="h-24 w-24 border-4 border-background">
                 {profile.avatarBlobId && profile.avatarBlobId !== "default-avatar.png" ? (
-                  <AvatarImage src={`${AGGREGATOR_URL}${profile.avatarBlobId}`} alt={profile.nickname} />
+                  <AvatarImage src={`${AGGREGATOR_URL}/${profile.avatarBlobId}`} alt={profile.nickname} />
                 ) : (
                   <AvatarImage src="/joyful-monarch.png" alt={profile.nickname} />
                 )}
