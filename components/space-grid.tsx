@@ -28,7 +28,6 @@ interface SpaceData {
   comments: number
   heat: number
   walrusBlobId: string
-  textPreview?: string
 }
 
 // 全局缓存

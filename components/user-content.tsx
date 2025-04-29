@@ -2,7 +2,7 @@
 
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ThumbsUp, MessageSquare, Calendar, Loader2 } from "lucide-react"
+import { ThumbsUp, MessageSquare, Calendar, Loader2, Flame } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { useContracts } from "@/hooks/use-contracts"
@@ -10,26 +10,40 @@ import { useWallet } from "@/hooks/use-wallet"
 import { getAllSpaces } from "@/services/space-service"
 import { useEffect, useState } from "react"
 import { AGGREGATOR_URL, SPACE_TYPE_LABELS, SpaceType } from "@/lib/constants"
+import { fetchDataById, getWalrusContent } from "@/services/upload-service"
+import { useLanguage } from "@/lib/i18n/context"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 // 定义空间数据类型
 interface UserSpace {
   id: number
   title: string
-  image: string
+  image?: string
+  videoUrl?: string // 视频文件的URL
+  textPreview?: string // 文本内容预览
   type: string
   typeNumber: number
   spaceId: string
   date: string
   likes: number
   comments: number
+  heat: number
   walrusBlobId: string
   originalIndex?: number
+  creator: string
+  creatorAvatar: string
 }
 
+// 全局缓存
+const walrusContentCache = new Map<string, any>()
+const videoUrlCache = new Map<string, string>()
+
 export function UserContent() {
+  const { t } = useLanguage()
   const [userSpaces, setUserSpaces] = useState<UserSpace[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [hoveredVideo, setHoveredVideo] = useState<number | null>(null)
   
   const { address } = useWallet()
   const { space: spaceContract } = useContracts()
@@ -81,18 +95,26 @@ export function UserContent() {
           return {
             id: index + 1,
             title: space.title || "未命名空间",
-            image: type !== "text" ? `${AGGREGATOR_URL}${space.walrusBlobId}` : "/cosmic-text.png",
+            image: spaceType === 1 ? `${AGGREGATOR_URL}/${space.walrusBlobId}` : undefined,
+            videoUrl: undefined,
+            textPreview: undefined,
             type: SPACE_TYPE_LABELS[spaceType as SpaceType] || "未知",
             typeNumber: spaceType,
             spaceId: String(space.originalIndex), // 使用添加的原始索引作为spaceId
             date: dateText,
             likes: Number(space.likes) || 0,
             comments: 0, // 评论数暂无
-            walrusBlobId: space.walrusBlobId
+            heat: Number(space.heat) || 0,
+            walrusBlobId: space.walrusBlobId,
+            creator: space.creator || "未知创建者",
+            creatorAvatar: "/martial-arts-master-humor.png",
           }
         })
         
         setUserSpaces(formattedSpaces)
+        
+        // 异步加载内容
+        formattedSpaces.forEach(fetchWalrusContent)
       } catch (err) {
         console.error("获取用户空间失败:", err)
         setError("无法加载您的空间数据")
@@ -103,6 +125,84 @@ export function UserContent() {
     
     fetchUserSpaces()
   }, [spaceContract, address])
+  
+  // 获取 Walrus 内容
+  const fetchWalrusContent = async (space: UserSpace) => {
+    if (!space.walrusBlobId) return
+
+    try {
+      // 检查缓存
+      if (walrusContentCache.has(space.walrusBlobId)) {
+        const cachedContent = walrusContentCache.get(space.walrusBlobId)
+        updateSpaceContent(space, cachedContent)
+        return
+      }
+
+      console.log(`获取空间 ${space.id} 的 Walrus 内容...`)
+      const content = await getWalrusContent(space.walrusBlobId)
+      walrusContentCache.set(space.walrusBlobId, content)
+      updateSpaceContent(space, content)
+    } catch (err) {
+      console.error(`获取空间 ${space.id} 的 Walrus 内容失败:`, err)
+    }
+  }
+
+  // 更新空间内容
+  const updateSpaceContent = async (space: UserSpace, content: any) => {
+    if (space.typeNumber === 0) { // 文本类型
+      const textPreview = content?.content || content?.text || "无文本内容"
+      setUserSpaces((prev) =>
+        prev.map((s) =>
+          s.id === space.id ? { ...s, textPreview } : s
+        )
+      )
+    } else if (space.typeNumber === 2) { // 视频类型
+      // 检查视频 URL 缓存
+      if (videoUrlCache.has(space.walrusBlobId)) {
+        setUserSpaces((prev) =>
+          prev.map((s) =>
+            s.id === space.id ? { ...s, videoUrl: videoUrlCache.get(space.walrusBlobId) } : s
+          )
+        )
+        return
+      }
+
+      // 拉取视频分片并生成 Blob URL
+      try {
+        const metadata = content // getWalrusContent 返回元数据
+        if (!metadata.chunks || !Array.isArray(metadata.chunks)) {
+          throw new Error("无效的视频元数据")
+        }
+
+        const blobs: Blob[] = []
+        for (const chunk of metadata.chunks.sort((a: any, b: any) => a.index - b.index)) {
+          const chunkBuffer = await fetchDataById(chunk.blobId)
+          blobs.push(new Blob([chunkBuffer], { type: metadata.mimeType }))
+        }
+
+        const videoBlob = new Blob(blobs, { type: metadata.mimeType })
+        const videoUrl = URL.createObjectURL(videoBlob)
+        videoUrlCache.set(space.walrusBlobId, videoUrl)
+
+        setUserSpaces((prev) =>
+          prev.map((s) =>
+            s.id === space.id ? { ...s, videoUrl } : s
+          )
+        )
+      } catch (err) {
+        console.error(`处理视频 ${space.id} 失败:`, err)
+      }
+    }
+    // meme 类型已通过 image 初始化，无需额外处理
+  }
+  
+  // 清理 Blob URL
+  useEffect(() => {
+    return () => {
+      videoUrlCache.forEach((url) => URL.revokeObjectURL(url))
+      videoUrlCache.clear()
+    }
+  }, [])
 
   if (loading) {
     return (
@@ -145,31 +245,74 @@ export function UserContent() {
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {userSpaces.map((space) => (
         <Link href={`/space/${space.spaceId}`} key={space.id}>
-          <Card className="overflow-hidden hover:shadow-md transition-shadow">
+          <Card 
+            className="overflow-hidden hover:shadow-md transition-shadow"
+            onMouseEnter={() => space.typeNumber === 2 && setHoveredVideo(space.id)}
+            onMouseLeave={() => setHoveredVideo(null)}
+          >
             <div className="relative aspect-video">
-              {space.typeNumber !== 0 ? (
+              {space.typeNumber === 1 && ( // Meme 类型
                 <Image 
-                  src={space.image || "/placeholder.svg"} 
+                  src={space.image || "/martial-arts-master-humor.png"} 
                   alt={space.title} 
                   fill 
-                  className="object-cover" 
+                  className="object-cover"
                   unoptimized
                 />
-              ) : (
-                // 文本类型显示特殊样式
+              )}
+              {space.typeNumber === 2 && space.videoUrl && ( // 视频类型，已加载
+                <video
+                  src={space.videoUrl}
+                  className="w-full h-full object-cover"
+                  muted
+                  loop
+                  autoPlay={hoveredVideo === space.id}
+                />
+              )}
+              {space.typeNumber === 2 && !space.videoUrl && ( // 视频类型，加载中
+                <div className="w-full h-full bg-muted flex items-center justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              )}
+              {space.typeNumber === 0 && ( // 文本类型
                 <div className="w-full h-full bg-gradient-to-br from-muted/10 to-muted/40 flex flex-col items-center justify-center relative p-4">
                   <div className="absolute top-3 left-3 text-4xl text-muted-foreground/30 font-serif">"</div>
                   <div className="absolute bottom-3 right-3 text-4xl text-muted-foreground/30 font-serif rotate-180">"</div>
                   <div className="text-center text-sm italic text-foreground/80 line-clamp-3">
-                    内容预览...
+                    {space.textPreview || "加载文本中..."}
                   </div>
                 </div>
               )}
+              {space.typeNumber === 2 && space.videoUrl && ( // 视频播放按钮
+                <div className="absolute inset-0 flex items-center justify-center">
+                  {hoveredVideo === space.id ? (
+                    <div className="w-12 h-12 rounded-full bg-black/50 flex items-center justify-center">
+                      <div className="w-3 h-8 bg-white rounded-sm"></div>
+                    </div>
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-black/50 flex items-center justify-center">
+                      <div className="w-0 h-0 border-y-8 border-y-transparent border-l-12 border-l-white ml-1"></div>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="absolute top-2 right-2">
-                <Badge variant="secondary">{space.type}</Badge>
+                <Badge variant="secondary" className="flex items-center gap-1">
+                  <Flame className="h-3 w-3 text-orange-500" />
+                  <span>{space.heat}</span>
+                </Badge>
               </div>
             </div>
             <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Avatar className="h-6 w-6">
+                  <AvatarImage src={space.creatorAvatar} alt="创建者" />
+                  <AvatarFallback>用户</AvatarFallback>
+                </Avatar>
+                <div className="text-sm text-muted-foreground">
+                  {space.creator.substring(0, 6)}...{space.creator.substring(space.creator.length - 4)}
+                </div>
+              </div>
               <h3 className="font-bold mb-2 line-clamp-2">{space.title}</h3>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-muted-foreground">#{space.spaceId}</span>
@@ -178,15 +321,22 @@ export function UserContent() {
                   {space.date}
                 </span>
               </div>
-              <div className="flex items-center gap-4">
-                <span className="text-sm text-muted-foreground flex items-center gap-1">
-                  <ThumbsUp className="h-3 w-3" />
-                  {space.likes}
-                </span>
-                <span className="text-sm text-muted-foreground flex items-center gap-1">
-                  <MessageSquare className="h-3 w-3" />
-                  {space.comments}
-                </span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-muted-foreground flex items-center gap-1">
+                    <ThumbsUp className="h-3 w-3" />
+                    {space.likes}
+                  </span>
+                  <span className="text-sm text-muted-foreground flex items-center gap-1">
+                    <MessageSquare className="h-3 w-3" />
+                    {space.comments}
+                  </span>
+                </div>
+                <div>
+                  <Badge variant="outline" className="text-xs">
+                    {space.type}
+                  </Badge>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -195,3 +345,4 @@ export function UserContent() {
     </div>
   )
 }
+
