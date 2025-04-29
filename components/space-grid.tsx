@@ -28,6 +28,7 @@ interface SpaceData {
   comments: number
   heat: number
   walrusBlobId: string
+  textPreview?: string
 }
 
 // 全局缓存，用于存储已获取的Walrus内容
@@ -61,11 +62,13 @@ export default function SpaceGrid() {
           let spaceType = Number(space.spaceType)
           // 根据空间类型确定类型标签
           let type = "text"
-          if (spaceType ===  1) {
+          if (spaceType === 1) {
             type = "meme"
           } else if (spaceType === 2) {
             type = "video"
           }
+
+          console.log(`空间ID: ${index + 1}, 类型: ${spaceType}, 类型标签: ${type}, 标题: ${space.title}`)
 
           // 创建格式化的空间对象
           return {
@@ -74,7 +77,7 @@ export default function SpaceGrid() {
             creator: space.creator || "未知创建者",
             creatorAvatar: "/abstract-user-icon.png", // 默认头像
             type,
-            image: `${AGGREGATOR_URL}${space.walrusBlobId}`,
+            image: type !== "text" ? `${AGGREGATOR_URL}${space.walrusBlobId}` : "",
             likes: Number(space.likes) || 0,
             comments: 0, // 评论数暂时没有
             heat: Number(space.heat) || 0,
@@ -85,11 +88,11 @@ export default function SpaceGrid() {
         setSpaces(formattedSpaces)
 
         // 获取每个空间的Walrus内容
-       /* for (const space of formattedSpaces) {
+        for (const space of formattedSpaces) {
           if (space.walrusBlobId) {
             fetchWalrusContent(space)
           }
-        }*/
+        }
       } catch (err) {
         console.error("获取空间失败:", err)
         setError("获取空间数据失败，请稍后再试")
@@ -120,7 +123,7 @@ export default function SpaceGrid() {
         // 将内容存入缓存
         walrusContentCache.set(space.walrusBlobId, content)
 
-        // 更新空间图片
+        // 更新空间图片和内容
         updateSpaceWithWalrusContent(space, content)
       }
     } catch (err) {
@@ -130,13 +133,30 @@ export default function SpaceGrid() {
 
   // 修改updateSpaceWithWalrusContent函数，直接使用AGGREGATOR_URL和blobId
   function updateSpaceWithWalrusContent(space: SpaceData, content: any) {
-    // 从AGGREGATOR_URL和blobId构建图片URL
-    const imageUrl = `${AGGREGATOR_URL}${space.walrusBlobId}`
+    try {
+      // 为文本类型空间提取内容预览
+      if (space.type === "text" && content && content.content) {
+        setSpaces((prevSpaces) => 
+          prevSpaces.map((s) => 
+            s.id === space.id 
+              ? { ...s, textPreview: content.content.substring(0, 200) } 
+              : s
+          )
+        )
+        console.log(`已更新空间 ${space.id} 的文本预览`);
+        return;
+      }
+      
+      // 从AGGREGATOR_URL和blobId构建图片URL
+      const imageUrl = `${AGGREGATOR_URL}${space.walrusBlobId}`
 
-    // 直接更新空间的图片URL，不再尝试从内容中提取
-    setSpaces((prevSpaces) => prevSpaces.map((s) => (s.id === space.id ? { ...s, image: imageUrl } : s)))
+      // 直接更新空间的图片URL，不再尝试从内容中提取
+      setSpaces((prevSpaces) => prevSpaces.map((s) => (s.id === space.id ? { ...s, image: imageUrl } : s)))
 
-    console.log(`已更新空间 ${space.id} 的图片URL: ${imageUrl}`)
+      console.log(`已更新空间 ${space.id} 的图片URL: ${imageUrl}`)
+    } catch (error) {
+      console.error(`更新空间内容失败: ${error}`)
+    }
   }
 
   // 如果正在加载，显示加载状态
@@ -261,6 +281,9 @@ function SpaceCard({
   onMouseLeave: () => void
 }) {
   const [imageError, setImageError] = useState(false)
+  const { t } = useLanguage()
+
+  console.log("space image",space.image)
 
   return (
     <Link href={`/space/${space.id}`}>
@@ -269,37 +292,58 @@ function SpaceCard({
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
       >
-        <div className="relative aspect-video">
-          <Image
-            src={imageError ? "/abstract-thumbnail.png" : space.image}
-            alt={space.title}
-            fill
-            className="object-cover"
-            onError={(e) => {
-              console.error(`图片加载失败: ${space.image}`)
-              setImageError(true)
-            }}
-          />
-          {space.type === "video" && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              {isVideoHovered ? (
-                <div className="w-12 h-12 rounded-full bg-black/50 flex items-center justify-center">
-                  <div className="w-3 h-8 bg-white rounded-sm"></div>
-                </div>
-              ) : (
-                <div className="w-12 h-12 rounded-full bg-black/50 flex items-center justify-center">
-                  <div className="w-0 h-0 border-y-8 border-y-transparent border-l-12 border-l-white ml-1"></div>
-                </div>
-              )}
+        {space.type !== "text" ? (
+          // 对于图片(meme)和视频类型，显示图片
+          <div className="relative aspect-video">
+            <Image
+              src={imageError ? "/abstract-thumbnail.png" : space.image}
+              alt={space.title}
+              fill
+              className="object-cover"
+              onError={(e) => {
+                console.error(`图片加载失败: ${space.image}`)
+                setImageError(true)
+              }}
+            />
+            {space.type === "video" && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                {isVideoHovered ? (
+                  <div className="w-12 h-12 rounded-full bg-black/50 flex items-center justify-center">
+                    <div className="w-3 h-8 bg-white rounded-sm"></div>
+                  </div>
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-black/50 flex items-center justify-center">
+                    <div className="w-0 h-0 border-y-8 border-y-transparent border-l-12 border-l-white ml-1"></div>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="absolute top-2 right-2">
+              <Badge variant="secondary" className="flex items-center gap-1">
+                <Flame className="h-3 w-3 text-orange-500" />
+                <span>{space.heat}</span>
+              </Badge>
             </div>
-          )}
-          <div className="absolute top-2 right-2">
-            <Badge variant="secondary" className="flex items-center gap-1">
-              <Flame className="h-3 w-3 text-orange-500" />
-              <span>{space.heat}</span>
-            </Badge>
           </div>
-        </div>
+        ) : (
+          // 对于文本类型，显示简洁的文本卡片
+          <div className="bg-gradient-to-br from-muted/20 to-muted/40 p-6 aspect-video flex flex-col justify-between relative">
+            {/* 装饰性引号 */}
+            <div className="absolute top-3 left-3 text-4xl text-muted-foreground/30 font-serif">"</div>
+            <div className="absolute bottom-3 right-3 text-4xl text-muted-foreground/30 font-serif rotate-180">"</div>
+            
+            <div className="line-clamp-5 text-sm text-foreground/80 italic mt-4 mx-4 z-10">
+              {space.textPreview || t("space.content.placeholder")}
+            </div>
+            
+            <div className="flex justify-end mt-4">
+              <Badge variant="secondary" className="flex items-center gap-1">
+                <Flame className="h-3 w-3 text-orange-500" />
+                <span>{space.heat}</span>
+              </Badge>
+            </div>
+          </div>
+        )}
         <CardContent className="p-4">
           <div className="flex items-center gap-2 mb-2">
             <div

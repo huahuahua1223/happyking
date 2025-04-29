@@ -29,6 +29,16 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import React, { useEffect, useState } from "react"
 import { useLanguage } from "@/lib/i18n/context"
+import { Badge } from "@/components/ui/badge"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Icons } from "@/components/icons"
+import { copy } from "@/lib/utils"
+import { format } from "date-fns"
 
 // Define content interface
 interface ISpaceContent {
@@ -261,7 +271,26 @@ export default function SpaceDetailPage({ params }: { params: SpaceParams }) {
                   }}
                 />
               ) : (
-                <Image src="/cosmic-text.png" alt={spaceData.title} fill className="object-cover" />
+                // 文本类型的空间展示优化
+                <div className="w-full h-full bg-gradient-to-br from-muted/10 to-muted/40 flex flex-col items-center justify-center relative p-8">
+                  {/* 装饰性引号 */}
+                  <div className="absolute top-12 left-12 text-8xl text-muted-foreground/20 font-serif">"</div>
+                  <div className="absolute bottom-12 right-12 text-8xl text-muted-foreground/20 font-serif rotate-180">"</div>
+                  
+                  {/* 内容预览 */}
+                  <div className="max-w-2xl text-center z-10">
+                    <p className="text-xl font-medium text-foreground/80 italic leading-relaxed line-clamp-6 mb-6">
+                      {spaceData.content || t("space.content.placeholder")}
+                    </p>
+                    
+                    <div className="flex justify-center">
+                      <Badge variant="secondary" className="flex items-center gap-1 text-base">
+                        <Flame className="h-4 w-4 text-orange-500" />
+                        <span>{spaceData.heat}</span>
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
 

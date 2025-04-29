@@ -38,9 +38,19 @@ export function SpaceContent({ spaceData }: SpaceContentProps) {
         return (
           <div className="prose prose-invert max-w-none">
             {spaceData.content ? (
-              spaceData.content.split("\n").map((paragraph, index) => <p key={index}>{paragraph}</p>)
+              <div className="bg-muted/10 p-6 rounded-lg border border-muted/30">
+                <div className="relative">
+                  <div className="text-xl font-serif text-muted-foreground/40 absolute -top-4 -left-2">"</div>
+                  {spaceData.content.split("\n").map((paragraph, index) => (
+                    <p key={index} className="mb-4 text-lg leading-relaxed">
+                      {paragraph}
+                    </p>
+                  ))}
+                  <div className="text-xl font-serif text-muted-foreground/40 absolute -bottom-4 -right-2 rotate-180">"</div>
+                </div>
+              </div>
             ) : (
-              <p>没有可显示的内容</p>
+              <p className="text-center text-muted-foreground italic">没有可显示的内容</p>
             )}
           </div>
         )
