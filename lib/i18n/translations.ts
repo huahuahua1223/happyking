@@ -96,6 +96,11 @@ export const translations: LanguagePack = {
     "nav.back.home": "返回首页",
     "nav.menu": "菜单",
 
+    // 404
+    "not.found.title": "页面未找到",
+    "not.found.description": "无法找到请求的资源",
+    "not.found.back.home": "返回首页",
+
     // 钱包
     // Wallet
     "wallet.connect": "连接钱包",
@@ -183,6 +188,7 @@ export const translations: LanguagePack = {
     "space.created.at": "创建时间",
     "space.content.count": "内容数量",
     "space.tags": "标签",
+    "space.creative": "创意",
     "space.heat": "热度",
     "space.likes": "点赞数",
     "space.comments": "评论数",
@@ -200,6 +206,16 @@ export const translations: LanguagePack = {
     "space.video.required": "请上传短视频",
     "space.create.connect_wallet": "您需要连接钱包才能创建空间",
     "space.type.placeholder": "选择空间类型",
+
+    // 评论
+    // Comments
+    "space.comments.publish": "发表评论",
+    "space.comments.placeholder": "写下你的评论...",
+    "space.comments.publishing": "发布中...",
+    "space.comments.loading": "加载评论中...",
+    "space.comments.no.comments": "暂无评论，快来发表第一条评论吧！",
+    "space.comments.real.data": "显示链上真实评论数据",
+    "space.comments.mock.data": "显示示例评论数据",
 
     // 表单验证
     // Form validation
@@ -536,6 +552,7 @@ export const translations: LanguagePack = {
     "space.created.at": "Created At",
     "space.content.count": "Content Count",
     "space.tags": "Tags",
+    "space.creative": "Creative",
     "space.heat": "Heat",
     "space.likes": "Likes",
     "space.comments": "Comments",
@@ -553,6 +570,17 @@ export const translations: LanguagePack = {
     "space.video.required": "Please upload a short video",
     "space.create.connect_wallet": "You need to connect your wallet to create a space",
     "space.type.placeholder": "Select spaceType",
+
+    // 评论
+    // Comments
+    "space.comments.publish": "Publish Comment",
+    "space.comments.placeholder": "Write your comment...",
+    "space.comments.publishing": "Publishing...",
+    "space.comments.loading": "Loading comments...",
+    "space.comments.no.comments": "No comments yet, be the first to comment!",
+    "space.comments.real.data": "Show real data from the chain",
+    "space.comments.mock.data": "Show mock data",
+
 
     // Form validation
     "form.incomplete": "Form Incomplete",
@@ -741,6 +769,11 @@ export const translations: LanguagePack = {
     "upload.resume": "Resume Upload",
     "upload.pause": "Pause Upload",
     "upload.cancel": "Cancel Upload",
+
+    // 404
+    "not.found.title": "Page Not Found",
+    "not.found.description": "Cannot find the requested resource",
+    "not.found.back.home": "Back to Home",
 
     // 其他
     optional: "Optional",

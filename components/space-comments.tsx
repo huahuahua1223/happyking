@@ -10,6 +10,7 @@ import { commentOnSpace, getSpaceComments } from "@/services/space-service"
 import { uploadJsonData } from "@/services/upload-service"
 import { Loader2, ThumbsDown, ThumbsUp } from "lucide-react"
 import { useEffect, useState } from "react"
+import { useLanguage } from "@/lib/i18n/context"
 
 interface Reply {
   id: number
@@ -126,6 +127,7 @@ export function SpaceComments({ spaceId }: { spaceId: number }) {
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [useRealData, setUseRealData] = useState(false)
+  const { t } = useLanguage()
 
   // 加载评论数据
   useEffect(() => {
@@ -264,7 +266,7 @@ export function SpaceComments({ spaceId }: { spaceId: number }) {
   return (
     <div className="space-y-6">
       <div className="space-y-4">
-        <h3 className="text-lg font-bold">发表评论</h3>
+        <h3 className="text-lg font-bold">{t("space.comments.publish")}</h3>
         <div className="flex gap-4">
           <Avatar>
             <AvatarImage src="/abstract-user-icon.png" alt="User" />
@@ -272,7 +274,7 @@ export function SpaceComments({ spaceId }: { spaceId: number }) {
           </Avatar>
           <div className="flex-1 space-y-2">
             <Textarea
-              placeholder="写下你的评论..."
+              placeholder={t("space.comments.placeholder")}
               value={commentText}
               onChange={(e) => setCommentText(e.target.value)}
               disabled={isSubmitting}
@@ -282,10 +284,10 @@ export function SpaceComments({ spaceId }: { spaceId: number }) {
                 {isSubmitting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    发布中...
+                    {t("space.comments.publishing")}
                   </>
                 ) : (
-                  "发布评论"
+                  t("space.comments.publish")
                 )}
               </Button>
             </div>
@@ -298,7 +300,7 @@ export function SpaceComments({ spaceId }: { spaceId: number }) {
         {isLoading ? (
           <div className="flex justify-center items-center py-8">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <span className="ml-2">加载评论中...</span>
+            <span className="ml-2">{t("space.comments.loading")}</span>
           </div>
         ) : comments.length > 0 ? (
           comments.map((comment) => (
@@ -381,7 +383,7 @@ export function SpaceComments({ spaceId }: { spaceId: number }) {
             </div>
           ))
         ) : (
-          <div className="text-center py-8 text-muted-foreground">暂无评论，快来发表第一条评论吧！</div>
+          <div className="text-center py-8 text-muted-foreground">{t("space.comments.no.comments")}</div>
         )}
 
         {loadError && (
@@ -390,7 +392,7 @@ export function SpaceComments({ spaceId }: { spaceId: number }) {
 
         {/* 数据来源提示 */}
         <div className="text-center text-xs text-muted-foreground mt-4">
-          {useRealData ? "显示链上真实评论数据" : "显示示例评论数据"}
+          {useRealData ? t("space.comments.real.data") : t("space.comments.mock.data")}
         </div>
       </div>
     </div>

@@ -139,6 +139,8 @@ export default function CreateSpacePage() {
 
           // 确保 spaceType 是有效的数字
           const spaceTypeNum = Number(formData.spaceType)
+          
+          console.log(`创建空间类型: ${spaceTypeNum}, 枚举值: ${SpaceType[spaceTypeNum]}`);
 
           console.log("调用createSpace服务方法...", {
             spaceType: spaceTypeNum,
