@@ -12,7 +12,7 @@ import { useContracts } from "@/hooks/use-contracts"
 import { useWallet } from "@/hooks/use-wallet"
 import { AGGREGATOR_URL, SPACE_TYPE_LABELS, SpaceType } from "@/lib/constants"
 import { getSpace, likeSpace } from "@/services/space-service"
-import { fetchJsonDataById } from "@/services/upload-service"
+import { fetchDataById, fetchJsonDataById, getWalrusContent } from "@/services/upload-service"
 import {
   ArrowLeft,
   Bookmark,
@@ -24,11 +24,13 @@ import {
   ThumbsUp,
   Wallet,
   Copy,
+  Play,
+  Pause,
 } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import React, { useEffect, useState } from "react"
+import React, { useEffect, useRef, useState } from "react"
 import { useLanguage } from "@/lib/i18n/context"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -64,6 +66,10 @@ export default function SpaceDetailPage({ params }: { params: SpaceParams }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [likeLoading, setLikeLoading] = useState(false)
+  const [videoUrl, setVideoUrl] = useState<string | null>(null) 
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [videoLoading, setVideoLoading] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
   const [spaceData, setSpaceData] = useState<{
     id: string
     title: string
@@ -174,6 +180,69 @@ export default function SpaceDetailPage({ params }: { params: SpaceParams }) {
     fetchSpaceDetail()
   }, [spaceId, space, toast])
 
+  // 处理视频播放逻辑
+  const handleVideoPlayback = () => {
+    if (!videoRef.current) return;
+    
+    if (videoRef.current.paused) {
+      videoRef.current.play();
+      setIsPlaying(true);
+    } else {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    }
+  }
+  
+  // 加载视频内容
+  useEffect(() => {
+    async function loadVideoContent() {
+      if (!spaceData || spaceData.typeNumber !== SpaceType.VIDEO || !spaceData.walrusBlobId) {
+        return;
+      }
+      
+      try {
+        setVideoLoading(true);
+        
+        // 获取视频元数据
+        const metadata = await getWalrusContent(spaceData.walrusBlobId);
+        
+        if (!metadata.chunks || !Array.isArray(metadata.chunks)) {
+          throw new Error("无效的视频元数据");
+        }
+        
+        // 加载视频分片
+        const blobs: Blob[] = [];
+        for (const chunk of metadata.chunks.sort((a: any, b: any) => a.index - b.index)) {
+          const chunkBuffer = await fetchDataById(chunk.blobId);
+          blobs.push(new Blob([chunkBuffer], { type: metadata.mimeType }));
+        }
+        
+        // 创建视频Blob URL
+        const videoBlob = new Blob(blobs, { type: metadata.mimeType });
+        const url = URL.createObjectURL(videoBlob);
+        setVideoUrl(url);
+      } catch (err) {
+        console.error("加载视频失败:", err);
+        toast({
+          title: "视频加载失败",
+          description: "无法加载视频内容，请稍后再试",
+          variant: "destructive",
+        });
+      } finally {
+        setVideoLoading(false);
+      }
+    }
+    
+    loadVideoContent();
+    
+    // 清理函数
+    return () => {
+      if (videoUrl) {
+        URL.revokeObjectURL(videoUrl);
+      }
+    };
+  }, [spaceData, toast]);
+
   // 处理点赞
   const handleLike = async () => {
     if (!space || !spaceData) {
@@ -266,17 +335,64 @@ export default function SpaceDetailPage({ params }: { params: SpaceParams }) {
         <div className="lg:col-span-2 space-y-6">
           <Card className="overflow-hidden">
             <div className="relative h-[400px] w-full">
-              {spaceData.typeNumber === SpaceType.MEME || spaceData.typeNumber === SpaceType.VIDEO ? (
+              {spaceData.typeNumber === SpaceType.MEME ? (
                 <Image
-                  src={`${AGGREGATOR_URL}${spaceData.walrusBlobId}`}
+                  src={`${AGGREGATOR_URL}/${spaceData.walrusBlobId}`}
                   alt={spaceData.title}
                   fill
                   className="object-cover"
                   onError={(e) => {
                     // Fallback image if the blob fails to load
-                    e.currentTarget.src = "/cosmic-nebula.png"
+                    e.currentTarget.src = "/martial-arts-master-humor.png"
                   }}
+                  unoptimized
                 />
+              ) : spaceData.typeNumber === SpaceType.VIDEO ? (
+                <div className="relative w-full h-full bg-black">
+                  {videoLoading ? (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <Loader2 className="h-12 w-12 animate-spin mb-4 text-primary" />
+                      <p className="text-sm text-white/70">加载视频中...</p>
+                    </div>
+                  ) : videoUrl ? (
+                    <>
+                      <video
+                        ref={videoRef}
+                        src={videoUrl}
+                        className="w-full h-full object-contain" 
+                        playsInline
+                        controls={false}
+                        onClick={handleVideoPlayback}
+                      />
+                      <button 
+                        className="absolute inset-0 flex items-center justify-center bg-black/30 hover:bg-black/40 transition-colors"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleVideoPlayback();
+                        }}
+                      >
+                        <div className="h-16 w-16 rounded-full bg-white/25 backdrop-blur-sm flex items-center justify-center">
+                          {isPlaying ? (
+                            <Pause className="h-8 w-8 text-white" />
+                          ) : (
+                            <Play className="h-8 w-8 text-white ml-1" />
+                          )}
+                        </div>
+                      </button>
+                    </>
+                  ) : (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <p className="text-white/70">无法加载视频</p>
+                    </div>
+                  )}
+                  
+                  <div className="absolute bottom-4 right-4">
+                    <Badge variant="secondary" className="flex items-center gap-1 text-base">
+                      <Flame className="h-4 w-4 text-orange-500" />
+                      <span>{spaceData.heat}</span>
+                    </Badge>
+                  </div>
+                </div>
               ) : (
                 // 文本类型的空间展示优化
                 <div className="w-full h-full bg-gradient-to-br from-muted/10 to-muted/40 flex flex-col items-center justify-center relative p-8">

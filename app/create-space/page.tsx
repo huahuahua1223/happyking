@@ -341,7 +341,7 @@ export default function CreateSpacePage() {
         console.log("空间创建成功:", result)
         if (result.spaceId) {
           console.log("重定向到新创建的空间页面:", `/space/${result.spaceId}`)
-          router.push(`/space/${result.spaceId}`)
+          router.push(`/`)
         } else {
           console.log("重定向到首页")
           router.push("/")

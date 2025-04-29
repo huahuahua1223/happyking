@@ -63,10 +63,10 @@ export function SpaceContent({ spaceData }: SpaceContentProps) {
               alt={spaceData.title}
               fill
               className="object-contain"
-              onError={(e) => {
-                // Fallback image if the blob fails to load
-                e.currentTarget.src = "/distracted-boyfriend-generic.png"
-              }}
+              // onError={(e) => {
+              //   // Fallback image if the blob fails to load
+              //   e.currentTarget.src = "/distracted-boyfriend-generic.png"
+              // }}
             />
           </div>
         )
@@ -79,10 +79,10 @@ export function SpaceContent({ spaceData }: SpaceContentProps) {
               alt={spaceData.title}
               fill
               className="object-cover"
-              onError={(e) => {
-                // Fallback image if the blob fails to load
-                e.currentTarget.src = "/abstract-thumbnail.png"
-              }}
+              // onError={(e) => {
+              //   // Fallback image if the blob fails to load
+              //   e.currentTarget.src = "/abstract-user-icon.png"
+              // }}
             />
             <div
               className="absolute inset-0 flex items-center justify-center cursor-pointer"
