@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Flame } from "lucide-react"
 import Link from "next/link"
+import { useLanguage } from "@/lib/i18n/context"
 
 interface SpaceRelatedProps {
   currentId?: number
@@ -12,6 +13,7 @@ interface SpaceRelatedProps {
 }
 
 export function SpaceRelated({ currentId, type }: SpaceRelatedProps) {
+  const { t } = useLanguage()
   // 这里只是模拟数据，实际应用中应该根据 currentId 和 type 从 API 获取相关空间
   const relatedSpaces = [
     {
@@ -50,7 +52,7 @@ export function SpaceRelated({ currentId, type }: SpaceRelatedProps) {
   return (
     <Card>
       <CardContent className="p-6">
-        <h3 className="text-lg font-bold mb-4">相关空间</h3>
+        <h3 className="text-lg font-bold mb-4">{t("space.related")}</h3>
         <div className="space-y-4">
           {filteredSpaces.map((space) => (
             <Link href={`/space/${space.id}`} key={space.id}>

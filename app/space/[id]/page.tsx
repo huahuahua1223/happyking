@@ -28,6 +28,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import React, { useEffect, useState } from "react"
+import { useLanguage } from "@/lib/i18n/context"
 
 // Define content interface
 interface ISpaceContent {
@@ -70,6 +71,7 @@ export default function SpaceDetailPage({ params }: { params: SpaceParams }) {
     date: string
     timestamp: number
   } | null>(null)
+  const { t } = useLanguage()
 
   useEffect(() => {
     async function fetchSpaceDetail() {
@@ -134,10 +136,10 @@ export default function SpaceDetailPage({ params }: { params: SpaceParams }) {
         setSpaceData({
           id: spaceId,
           title: spaceItem.title,
-          creator: "创作者", // Default creator name
+          creator: t("dashboard.creator"), // Default creator name
           creatorAddress: spaceItem.creator,
           avatar: "/abstract-user-icon.png", // Default avatar
-          type: SPACE_TYPE_LABELS[spaceItem.spaceType as SpaceType] || "未知类型",
+          type: SPACE_TYPE_LABELS[spaceItem.spaceType as SpaceType] || t("space.unknown.type"),
           typeNumber: Number(spaceItem.spaceType),
           walrusBlobId: spaceItem.walrusBlobId,
           content: content.content,
@@ -224,7 +226,7 @@ export default function SpaceDetailPage({ params }: { params: SpaceParams }) {
       <div className="container mx-auto px-4 py-8">
         <Link href="/" className="inline-flex items-center mb-6 text-muted-foreground hover:text-foreground">
           <ArrowLeft className="mr-2 h-4 w-4" />
-          返回首页
+          {t("nav.back.home")}
         </Link>
 
         <Card className="p-6 text-center">
@@ -240,7 +242,7 @@ export default function SpaceDetailPage({ params }: { params: SpaceParams }) {
     <div className="container mx-auto px-4 py-8">
       <Link href="/" className="inline-flex items-center mb-6 text-muted-foreground hover:text-foreground">
         <ArrowLeft className="mr-2 h-4 w-4" />
-        返回首页
+        {t("nav.back.home")}
       </Link>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -282,7 +284,7 @@ export default function SpaceDetailPage({ params }: { params: SpaceParams }) {
                 <div className="flex items-center gap-2">
                   <Button variant="outline" size="sm" className="gap-1">
                     <Flame className="h-4 w-4 text-orange-500" />
-                    <span>热度: {spaceData.heat}</span>
+                    <span>{t("space.heat")}: {spaceData.heat}</span>
                   </Button>
                   <Button variant="outline" size="icon">
                     <MoreHorizontal className="h-4 w-4" />
@@ -313,25 +315,25 @@ export default function SpaceDetailPage({ params }: { params: SpaceParams }) {
                   </Button>
                   <Button variant="ghost" className="flex items-center gap-2">
                     <Share2 className="h-4 w-4" />
-                    <span>分享</span>
+                    <span>{t("space.share")}</span>
                   </Button>
                 </div>
                 <Button variant="outline" className="flex items-center gap-2">
                   <Bookmark className="h-4 w-4" />
-                  <span>收藏</span>
+                  <span>{t("space.bookmark")}</span>
                 </Button>
               </div>
             </CardContent>
           </Card>
 
           <div className="mt-6">
-            <h2 className="text-2xl font-bold mb-4">空间内容</h2>
+            <h2 className="text-2xl font-bold mb-4">{t("space.content")}</h2>
             <SpaceContent spaceData={spaceData} />
           </div>
 
           <Tabs defaultValue="comments" className="w-full">
             <TabsList className="grid w-full grid-cols-1">
-              <TabsTrigger value="comments">评论 (0)</TabsTrigger>
+              <TabsTrigger value="comments">{t("space.comments")} (0)</TabsTrigger>
             </TabsList>
             <TabsContent value="comments" className="mt-4">
               <SpaceComments spaceId={Number(spaceData.id)} />
@@ -342,35 +344,35 @@ export default function SpaceDetailPage({ params }: { params: SpaceParams }) {
         <div className="space-y-6">
           <Card>
             <CardContent className="p-6">
-              <h3 className="text-lg font-bold mb-4">空间信息</h3>
+              <h3 className="text-lg font-bold mb-4">{t("space.info")}</h3>
 
               <div className="space-y-4">
                 <div>
-                  <p className="text-sm text-muted-foreground">空间ID</p>
+                  <p className="text-sm text-muted-foreground">{t("space.id")}</p>
                   <p className="font-medium">#{spaceData.id}</p>
                 </div>
 
                 <div>
-                  <p className="text-sm text-muted-foreground">创建时间</p>
+                  <p className="text-sm text-muted-foreground">{t("space.created.at")}</p>
                   <p className="font-medium">{spaceData.date}</p>
                 </div>
 
                 <div>
-                  <p className="text-sm text-muted-foreground">空间类型</p>
+                  <p className="text-sm text-muted-foreground">{t("space.type")}</p>
                   <p className="font-medium">{spaceData.type}</p>
                 </div>
 
                 <div>
-                  <p className="text-sm text-muted-foreground">点赞数量</p>
+                  <p className="text-sm text-muted-foreground">{t("space.likes")}</p>
                   <p className="font-medium">{spaceData.likes}</p>
                 </div>
 
                 <div>
-                  <p className="text-sm text-muted-foreground">标签</p>
+                  <p className="text-sm text-muted-foreground">{t("space.tags")}</p>
                   <div className="flex flex-wrap gap-2 mt-1">
                     <span className="px-2 py-1 bg-muted rounded-md text-xs">{spaceData.type}</span>
-                    <span className="px-2 py-1 bg-muted rounded-md text-xs">创意</span>
-                    <span className="px-2 py-1 bg-muted rounded-md text-xs">内容</span>
+                    <span className="px-2 py-1 bg-muted rounded-md text-xs">{t("space.creative")}</span>
+                    <span className="px-2 py-1 bg-muted rounded-md text-xs">{t("space.content")}</span>
                   </div>
                 </div>
               </div>
