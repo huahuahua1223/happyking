@@ -43,5 +43,10 @@ export const SPACE_TYPE_LABELS = {
 }
 
 // 添加Walrus服务URL常量
+/*
 export const PUBLISHER_URL = "https://publisher.walrus-testnet.walrus.space/v1/blobs"
 export const AGGREGATOR_URL = "https://aggregator.walrus-testnet.walrus.space/v1/blobs/"
+*/
+
+export const PUBLISHER_URL = "https://publisher.testnet.walrus.atalma.io/v1/blobs"
+export const AGGREGATOR_URL = "https://aggregator.testnet.walrus.atalma.io/v1/blobs"

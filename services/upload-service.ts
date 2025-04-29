@@ -1,34 +1,8 @@
-"use client"
+import { AGGREGATOR_URL, PUBLISHER_URL } from "@/lib/constants";
+import axios from "axios";
+import { Buffer } from "buffer";
+import { v4 as uuidv4 } from "uuid";
 
-import { AGGREGATOR_URL, PUBLISHER_URL } from "@/lib/constants"
-import { getTechnicalErrorDetails } from "@/lib/error-handler"
-import axios from "axios"
-
-// 将文件顶部的常量定义替换为:
-const PUBLISHER = PUBLISHER_URL
-
-// 上传状态类型
-export type UploadStatus = {
-  state: "idle" | "uploading" | "retrying" | "paused" | "completed" | "failed"
-  progress: number
-  message?: string
-  currentChunk?: number
-  totalChunks?: number
-  retryCount?: number
-  error?: string
-}
-
-// 分片状态类型
-type ChunkStatus = {
-  index: number
-  start: number
-  end: number
-  size: number
-  status: "pending" | "uploading" | "completed" | "failed"
-  retryCount: number
-  blobId?: string
-  error?: string
-}
 
 interface WalrusResponse {
   alreadyCertified?: { blobId: string; event?: { txDigest: string; eventSeq?: string }; endEpoch?: number }
@@ -58,21 +32,283 @@ interface WalrusResponse {
   cost?: number
 }
 
-// 存储上传会话的本地存储键
-const UPLOAD_SESSION_KEY = "walrus-upload-session"
+interface ChunkMetadata {
+  fileId: string;
+  chunks: { blobId: string; index: number; size: number }[];
+  totalSize: number;
+  fileName: string;
+  mimeType: string;
+}
 
-// 保存上传会话到本地存储
-function saveUploadSession(fileId: string, chunks: ChunkStatus[]): void {
-  try {
-    const session = {
-      fileId,
-      chunks,
-      timestamp: Date.now(),
-    }
-    localStorage.setItem(UPLOAD_SESSION_KEY, JSON.stringify(session))
-  } catch (error) {
-    console.error("Failed to save upload session:", error)
+interface UploadProgress {
+  uploadedBytes: number;
+  totalBytes: number;
+  percentage: number;
+}
+
+// 上传 JSON 数据
+ async function uploadJsonData(data: object): Promise<string> {
+  const jsonString = JSON.stringify(data)
+  const blob = new Blob([jsonString], { type: "application/json" })
+  const buffer = await blob.arrayBuffer()
+
+  const response = await axios.put(PUBLISHER_URL, buffer, {
+    headers: { "Content-Type": "application/json" },
+    timeout: 60000, // 增加超时时间到60秒
+  })
+
+  const data2 = response.data as WalrusResponse
+
+  if (data2.alreadyCertified?.blobId) {
+    return data2.alreadyCertified.blobId
   }
+
+  if (data2.newlyCreated?.blobObject?.blobId) {
+    return data2.newlyCreated.blobObject.blobId
+  }
+
+  throw new Error("error.upload_failed")
+}
+
+
+// 辅助函数：规范化Walrus blobId
+function normalizeWalrusBlobId(blobId: string): string {
+  if (!blobId) return '';
+  
+  // 移除开头的斜杠
+  let normalized = blobId.startsWith('/') ? blobId.substring(1) : blobId;
+  
+  // 移除可能包含的URL部分
+  if (normalized.includes('aggregator.walrus')) {
+    try {
+      const url = new URL(normalized);
+      normalized = url.pathname.split('/').pop() || '';
+    } catch (e) {
+      // 如果不是有效URL，保持原样
+    }
+  }
+  
+  // 如果是路径格式，提取最后一部分
+  if (normalized.includes('/')) {
+    normalized = normalized.split('/').pop() || '';
+  }
+  
+  return normalized.trim();
+}
+
+async function fetchDataById(blobId: string, retries = 3, timeout = 30000): Promise<ArrayBuffer> {
+  const normalizedBlobId = normalizeWalrusBlobId(blobId)
+  if (!normalizedBlobId) throw new Error("无效的 blobId")
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const response = await axios.get(`${AGGREGATOR_URL}/${normalizedBlobId}`, {
+        responseType: "arraybuffer",
+        timeout,
+        maxRedirects: 5,
+      })
+      console.log(`获取 blobId ${normalizedBlobId} 成功，状态: ${response.status}`)
+      return response.data
+    } catch (error) {
+      console.error(`尝试 ${attempt} 获取 blobId ${normalizedBlobId} 失败:`, error)
+      if (axios.isAxiosError(error)) {
+        if ((error.code === "ETIMEDOUT" || error.response?.status === 502) && attempt < retries) {
+          await new Promise((resolve) => setTimeout(resolve, 5000 * attempt))
+          continue
+        }
+      }
+      throw error
+    }
+  }
+  throw new Error(`获取 blobId ${normalizedBlobId} 失败，尝试 ${retries} 次`)
+}
+
+
+async function uploadToWalrus(
+  file: File,
+  onProgress?: (progress: number) => void,
+  statusCallback?: (status: string) => void,
+  t?: (key: string) => string
+): Promise<string> {
+  const chunkSize = 1 * 1024 * 1024; // 参考 Node.js 脚本，设为 1MB
+  const maxConcurrent = 3; // 折中并发数，参考 Node.js 的 5
+  const retryCount = 5; // 与 Node.js 脚本一致
+  const maxRetryDelay = 10000; // 最大重试延迟 10 秒
+  const timeout = 60000; // 增加超时到 60 秒
+
+  const fileName = file.name;
+  const totalSize = file.size;
+  const mimeType = file.type || "application/octet-stream";
+  const chunkCount = Math.ceil(totalSize / chunkSize);
+
+  statusCallback?.(t ? t("space.uploading") : "Uploading...");
+
+  const uploadChunk = async (index: number, attempt = 1): Promise<{ blobId: string; size: number }> => {
+    const offset = index * chunkSize;
+    const blob = file.slice(offset, offset + chunkSize);
+    const buffer = Buffer.from(await blob.arrayBuffer());
+
+    try {
+      const response = await axios.put(PUBLISHER_URL, buffer, {
+        headers: { "Content-Type": mimeType },
+        timeout,
+      });
+
+      const data = response.data as WalrusResponse;
+      const blobId =
+        data.alreadyCertified?.blobId || data.newlyCreated?.blobObject?.blobId;
+      if (!blobId) throw new Error("No blobId in response");
+
+      return { blobId, size: buffer.length };
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        const message = error.response?.data || error.message;
+
+        if (status === 429 || message.includes("too many requests")) {
+          // 处理速率限制
+          if (attempt <= retryCount) {
+            const delay = Math.min(2000 * Math.pow(2, attempt - 1), maxRetryDelay); // 指数退避
+            console.warn(`Rate limit hit, retrying chunk ${index} after ${delay}ms`);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            return uploadChunk(index, attempt + 1);
+          }
+          throw new Error(`Rate limit exceeded after ${retryCount} attempts: ${message}`);
+        }
+        if (status === 413) {
+          throw new Error(`Chunk too large (size: ${buffer.length} bytes)`);
+        }
+        if (status === 502 || error.code === "ETIMEDOUT" || error.code === "ERR_NETWORK") {
+          if (attempt <= retryCount) {
+            const delay = 3000 * attempt;
+            console.warn(`Network error, retrying chunk ${index} after ${delay}ms`);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            return uploadChunk(index, attempt + 1);
+          }
+        }
+        throw new Error(`Upload failed: ${message}`);
+      }
+      throw new Error(`Upload failed: ${String(error)}`);
+    }
+  };
+
+  const chunks: { blobId: string; index: number; size: number }[] = [];
+  let uploadedBytes = 0;
+
+  try {
+    for (let i = 0; i < chunkCount; i += maxConcurrent) {
+      const batch = Array.from(
+        { length: Math.min(maxConcurrent, chunkCount - i) },
+        (_, j) => i + j
+      );
+      const results = await Promise.all(batch.map((index) => uploadChunk(index)));
+
+      results.forEach((result, j) => {
+        chunks.push({ blobId: result.blobId, index: i + j, size: result.size });
+        uploadedBytes += result.size;
+        const percentage = (uploadedBytes / totalSize) * 100;
+        onProgress?.(percentage);
+      });
+    }
+
+    const metadata: ChunkMetadata = {
+      fileId: uuidv4(),
+      chunks: chunks.sort((a, b) => a.index - b.index),
+      totalSize,
+      fileName,
+      mimeType,
+    };
+
+    const metadataBlob = new Blob([JSON.stringify(metadata)], { type: "application/json" });
+    const metadataBuffer = Buffer.from(await metadataBlob.arrayBuffer());
+    const metadataResponse = await axios.put(PUBLISHER_URL, metadataBuffer, {
+      headers: { "Content-Type": "application/json" },
+      timeout,
+    });
+
+    const metadataData = metadataResponse.data as WalrusResponse;
+    const metadataId =
+      metadataData.alreadyCertified?.blobId ||
+      metadataData.newlyCreated?.blobObject?.blobId;
+
+    if (!metadataId) throw new Error("No metadata blobId in response");
+
+    statusCallback?.(t ? t("space.upload.success") : "Upload successful");
+    return metadataId;
+  } catch (error) {
+    const errorMessage = axios.isAxiosError(error)
+      ? error.response?.data || error.message
+      : String(error);
+    throw new Error(`Upload failed: ${errorMessage}`);
+  }
+}
+
+async function getWalrusContent(blobId: string): Promise<any> {
+  try {
+    const normalizedBlobId = normalizeWalrusBlobId(blobId)
+    if (!normalizedBlobId) {
+      console.error("无效的 blobId:", blobId)
+      return { error: "无效的内容ID", text: "内容无法加载" }
+    }
+
+    console.log(`从 Walrus 获取内容: blobId=${normalizedBlobId}`)
+    const buffer = await fetchDataById(normalizedBlobId)
+    const text = new TextDecoder().decode(buffer)
+
+    try {
+      const jsonData = JSON.parse(text)
+      console.log(`成功解析 JSON: ${normalizedBlobId}`)
+      return jsonData
+    } catch (e) {
+      console.log(`非 JSON，返回文本: ${normalizedBlobId}`)
+      return { text }
+    }
+  } catch (error) {
+    console.error(`从 Walrus 获取内容失败: ${blobId}`, error)
+    return {
+      error: error instanceof Error ? error.message : "未知错误",
+      text: "内容加载失败",
+      originalBlobId: blobId,
+    }
+  }
+}
+
+ async function uploadTextData(text: string): Promise<string> {
+  const blob = new Blob([text], { type: "text/plain" })
+  const buffer = await blob.arrayBuffer()
+
+  const response = await axios.put(PUBLISHER_URL, buffer, {
+    headers: { "Content-Type": "text/plain" },
+    timeout: 60000, // 增加超时时间到60秒
+  })
+
+  const data = response.data as WalrusResponse
+
+  if (data.alreadyCertified?.blobId) {
+    return data.alreadyCertified.blobId
+  }
+
+  if (data.newlyCreated?.blobObject?.blobId) {
+    return data.newlyCreated.blobObject.blobId
+  }
+
+  throw new Error("error.upload_failed")
+}
+
+// 上传状态类型
+export type UploadStatus = {
+  state: "idle" | "uploading" | "retrying" | "paused" | "completed" | "failed"
+  progress: number
+  message?: string
+  currentChunk?: number
+  totalChunks?: number
+  retryCount?: number
+  error?: string
+}
+
+// 生成文件唯一ID
+function generateFileId(file: File): string {
+  return `${file.name}-${file.size}-${file.lastModified}`
 }
 
 // 从本地存储获取上传会话
@@ -95,214 +331,6 @@ function getUploadSession(fileId: string): ChunkStatus[] | null {
   }
 }
 
-// 清除上传会话
-function clearUploadSession(): void {
-  try {
-    localStorage.removeItem(UPLOAD_SESSION_KEY)
-  } catch (error) {
-    console.error("Failed to clear upload session:", error)
-  }
-}
-
-// 生成文件唯一ID
-function generateFileId(file: File): string {
-  return `${file.name}-${file.size}-${file.lastModified}`
-}
-
-// 修改uploadToWalrus函数，添加状态回调和断点续传
-export async function uploadToWalrus(
-  file: File,
-  onProgress?: (progress: number) => void,
-  onStatus?: (status: UploadStatus) => void,
-  t?: (key: string) => string,
-  resumeUpload = true,
-): Promise<string> {
-  const MAX_RETRIES = 5
-  let retries = 0
-
-  // 默认翻译函数，如果没有提供
-  const translate = t || ((key: string) => key)
-
-  // 更新状态的辅助函数
-  const updateStatus = (status: Partial<UploadStatus>) => {
-    if (onStatus) {
-      onStatus({
-        state: "idle",
-        progress: 0,
-        ...status,
-      })
-    }
-
-    // 同时更新进度
-    if (onProgress && status.progress !== undefined) {
-      onProgress(status.progress)
-    }
-  }
-
-  // 添加指数退避重试
-  const attemptUpload = async (): Promise<string> => {
-    try {
-      updateStatus({
-        state: "uploading",
-        progress: 0,
-        message: translate("upload.starting"),
-      })
-
-      // 对于小文件，直接上传
-      if (file.size <= 1 * 1024 * 1024) {
-        updateStatus({
-          message: translate("upload.small_file"),
-          progress: 5,
-        })
-        return await uploadSingleFile(file, updateStatus)
-      }
-
-      // 对于大文件（如视频），使用分片上传
-      if (file.type.startsWith("video/") || file.size > 1 * 1024 * 1024) {
-        updateStatus({
-          message: translate("upload.large_file"),
-          progress: 5,
-        })
-        return await uploadLargeFile(file, updateStatus, resumeUpload)
-      }
-
-      // 默认使用单文件上传
-      return await uploadSingleFile(file, updateStatus)
-    } catch (error: any) {
-      // 检查是否是429错误（请求过多）
-      if (error.response && error.response.status === 429 && retries < MAX_RETRIES) {
-        retries++
-        // 使用指数退避算法计算等待时间
-        const waitTime = Math.min(1000 * Math.pow(2, retries), 30000) // 最多等待30秒
-
-        updateStatus({
-          state: "retrying",
-          message: translate("upload.rate_limited") + ` (${retries}/${MAX_RETRIES})`,
-          retryCount: retries,
-        })
-
-        console.log(`遇到限流，等待${waitTime}ms后重试 (${retries}/${MAX_RETRIES})...`)
-
-        // 等待一段时间后重试
-        await new Promise((resolve) => setTimeout(resolve, waitTime))
-        return attemptUpload()
-      }
-
-      // 记录详细错误信息（仅用于开发和日志）
-      console.error("上传失败详情:", getTechnicalErrorDetails(error))
-
-      // 确定错误类型
-      let errorType = "upload_failed"
-      let errorMessage = ""
-
-      if (error.response && error.response.status === 429) {
-        errorType = "rate_limit"
-        errorMessage = translate("error.rate_limit")
-      } else if (
-        error.code === "ECONNABORTED" ||
-        error.message?.includes("timeout") ||
-        error.message?.includes("exceeded")
-      ) {
-        errorType = "upload_timeout"
-        errorMessage = translate("error.upload_timeout")
-      } else if (error.message?.includes("Network Error") || !navigator.onLine) {
-        errorType = "testnet_unstable"
-        errorMessage = translate("error.testnet_unstable")
-      } else {
-        errorMessage = translate("error.upload_failed")
-      }
-
-      updateStatus({
-        state: "failed",
-        message: errorMessage,
-        error: errorMessage,
-      })
-
-      // 抛出用户友好的错误消息
-      throw new Error(errorMessage)
-    }
-  }
-
-  return attemptUpload()
-}
-
-// 修改uploadSingleFile函数，添加状态更新
-async function uploadSingleFile(file: File, updateStatus: (status: Partial<UploadStatus>) => void): Promise<string> {
-  let retries = 0
-  const MAX_RETRIES = 3
-
-  while (retries < MAX_RETRIES) {
-    try {
-      updateStatus({
-        state: "uploading",
-        progress: 10,
-        message: `${retries > 0 ? "重试中: " : ""}上传文件...`,
-      })
-
-      const response = await axios.put(PUBLISHER, await file.arrayBuffer(), {
-        headers: { "Content-Type": file.type },
-        timeout: 60000, // 60秒超时
-        onUploadProgress: (progressEvent) => {
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / (progressEvent.total || file.size))
-          updateStatus({
-            progress: Math.min(10 + percentCompleted * 0.8, 90), // 保留10%用于处理响应
-            message: `上传进度: ${percentCompleted}%`,
-          })
-        },
-      })
-
-      updateStatus({
-        progress: 95,
-        message: "处理响应...",
-      })
-
-      const data = response.data as WalrusResponse
-
-      let blobId: string
-      if (data.alreadyCertified?.blobId) {
-        blobId = data.alreadyCertified.blobId
-      } else if (data.newlyCreated?.blobObject?.blobId) {
-        blobId = data.newlyCreated.blobObject.blobId
-      } else {
-        throw new Error("error.upload_failed")
-      }
-
-      updateStatus({
-        state: "completed",
-        progress: 100,
-        message: "上传完成!",
-      })
-
-      return blobId
-    } catch (error: any) {
-      retries++
-
-      // 如果是429错误或最后一次重试失败，则抛出错误
-      if ((error.response?.status === 429 && retries >= MAX_RETRIES) || retries >= MAX_RETRIES) {
-        updateStatus({
-          state: "failed",
-          message: "上传失败",
-          error: error.message,
-        })
-        throw error
-      }
-
-      // 使用指数退避等待
-      const waitTime = Math.min(1000 * Math.pow(2, retries), 10000)
-
-      updateStatus({
-        state: "retrying",
-        message: `上传失败，${waitTime / 1000}秒后重试 (${retries}/${MAX_RETRIES})...`,
-        retryCount: retries,
-      })
-
-      console.log(`单文件上传失败，等待${waitTime}ms后重试 (${retries}/${MAX_RETRIES})...`)
-      await new Promise((resolve) => setTimeout(resolve, waitTime))
-    }
-  }
-
-  throw new Error("error.upload_failed")
-}
 
 // 修改uploadLargeFile函数，实现断点续传和细粒度重试
 async function uploadLargeFile(
@@ -385,7 +413,7 @@ async function uploadLargeFile(
 
       while (updatedChunk.retryCount < MAX_CHUNK_RETRIES) {
         try {
-          const response = await axios.put(PUBLISHER, buffer, {
+          const response = await axios.put(PUBLISHER_URL, buffer, {
             headers: { "Content-Type": file.type },
             timeout: 60000, // 60秒超时
           })
@@ -573,7 +601,7 @@ async function uploadLargeFile(
       const metadataBlob = new Blob([JSON.stringify(metadata)], { type: "application/json" })
       const metadataBuffer = await metadataBlob.arrayBuffer()
 
-      const metadataResponse = await axios.put(PUBLISHER, metadataBuffer, {
+      const metadataResponse = await axios.put(PUBLISHER_URL, metadataBuffer, {
         headers: { "Content-Type": "application/json" },
         timeout: 60000, // 60秒超时
       })
@@ -637,119 +665,46 @@ async function uploadLargeFile(
   throw new Error("error.upload_failed")
 }
 
-// 添加以下新函数到文件末尾
+// 存储上传会话的本地存储键
+const UPLOAD_SESSION_KEY = "walrus-upload-session"
 
-// 上传文本数据
-export async function uploadTextData(text: string): Promise<string> {
-  const blob = new Blob([text], { type: "text/plain" })
-  const buffer = await blob.arrayBuffer()
-
-  const response = await axios.put(PUBLISHER, buffer, {
-    headers: { "Content-Type": "text/plain" },
-    timeout: 60000, // 增加超时时间到60秒
-  })
-
-  const data = response.data as WalrusResponse
-
-  if (data.alreadyCertified?.blobId) {
-    return data.alreadyCertified.blobId
-  }
-
-  if (data.newlyCreated?.blobObject?.blobId) {
-    return data.newlyCreated.blobObject.blobId
-  }
-
-  throw new Error("error.upload_failed")
-}
-
-// 上传 JSON 数据
-export async function uploadJsonData(data: object): Promise<string> {
-  const jsonString = JSON.stringify(data)
-  const blob = new Blob([jsonString], { type: "application/json" })
-  const buffer = await blob.arrayBuffer()
-
-  const response = await axios.put(PUBLISHER, buffer, {
-    headers: { "Content-Type": "application/json" },
-    timeout: 60000, // 增加超时时间到60秒
-  })
-
-  const data2 = response.data as WalrusResponse
-
-  if (data2.alreadyCertified?.blobId) {
-    return data2.alreadyCertified.blobId
-  }
-
-  if (data2.newlyCreated?.blobObject?.blobId) {
-    return data2.newlyCreated.blobObject.blobId
-  }
-
-  throw new Error("error.upload_failed")
-}
-
-// 辅助函数：规范化Walrus blobId
-function normalizeWalrusBlobId(blobId: string): string {
-  if (!blobId) return '';
-  
-  // 移除开头的斜杠
-  let normalized = blobId.startsWith('/') ? blobId.substring(1) : blobId;
-  
-  // 移除可能包含的URL部分
-  if (normalized.includes('aggregator.walrus')) {
-    try {
-      const url = new URL(normalized);
-      normalized = url.pathname.split('/').pop() || '';
-    } catch (e) {
-      // 如果不是有效URL，保持原样
-    }
-  }
-  
-  // 如果是路径格式，提取最后一部分
-  if (normalized.includes('/')) {
-    normalized = normalized.split('/').pop() || '';
-  }
-  
-  return normalized.trim();
-}
-
-// 查询数据
-export async function fetchDataById(blobId: string): Promise<ArrayBuffer> {
+// 清除上传会话
+function clearUploadSession(): void {
   try {
-    // 规范化blobId
-    const normalizedBlobId = normalizeWalrusBlobId(blobId);
-    
-    console.log(`从Walrus获取数据, 原始blobId: ${blobId}`);
-    console.log(`规范化后的blobId: ${normalizedBlobId}`);
-    
-    // 检查blobId格式
-    if (!normalizedBlobId) {
-      console.error('无效的blobId:', blobId);
-      throw new Error('无效的blobId');
-    }
-    
-    const fullUrl = `${AGGREGATOR_URL}${normalizedBlobId}`;
-    console.log(`完整URL: ${fullUrl}`);
-    
-    const response = await axios.get(fullUrl, {
-      responseType: "arraybuffer",
-      timeout: 15000, // 增加超时时间到15秒
-    });
-    return response.data;
+    localStorage.removeItem(UPLOAD_SESSION_KEY)
   } catch (error) {
-    console.error(`从Walrus获取数据失败: ${blobId}`, error);
-    
-    // 提供更详细的错误信息
-    if (axios.isAxiosError(error)) {
-      if (error.response) {
-        console.error(`HTTP错误: ${error.response.status} - URL: ${AGGREGATOR_URL}${blobId}`);
-      } else if (error.request) {
-        console.error(`请求发送但未收到响应: ${error.message}`);
-      } else {
-        console.error(`请求配置错误: ${error.message}`);
-      }
-    }
-    
-    throw error;
+    console.error("Failed to clear upload session:", error)
   }
+}
+
+// 保存上传会话到本地存储
+function saveUploadSession(fileId: string, chunks: ChunkStatus[]): void {
+  try {
+    const session = {
+      fileId,
+      chunks,
+      timestamp: Date.now(),
+    }
+    localStorage.setItem(UPLOAD_SESSION_KEY, JSON.stringify(session))
+  } catch (error) {
+    console.error("Failed to save upload session:", error)
+  }
+}
+
+  // 尝试恢复上传会话
+  let chunks: ChunkStatus[] = []
+  let resumedUpload = false
+
+  // 分片状态类型
+type ChunkStatus = {
+  index: number
+  start: number
+  end: number
+  size: number
+  status: "pending" | "uploading" | "completed" | "failed"
+  retryCount: number
+  blobId?: string
+  error?: string
 }
 
 // 查询并解析JSON数据
@@ -771,74 +726,10 @@ export function pauseUpload(): void {
   console.log("暂停上传功能尚未实现")
 }
 
-// 恢复上传
-export async function resumeUpload(
-  file: File,
-  onProgress?: (progress: number) => void,
-  onStatus?: (status: UploadStatus) => void,
-  t?: (key: string) => string,
-): Promise<string> {
-  return uploadToWalrus(file, onProgress, onStatus, t, true)
-}
-
 // 取消上传并清除会话
 export function cancelUpload(): void {
   clearUploadSession()
 }
 
-export async function getWalrusContent(blobId: string): Promise<any> {
-  try {
-    // 规范化blobId
-    const normalizedBlobId = normalizeWalrusBlobId(blobId);
-    
-    if (!normalizedBlobId) {
-      console.error('无效的blobId:', blobId);
-      return { error: "无效的内容ID", text: "内容无法加载" };
-    }
-    
-    console.log(`从Walrus获取内容: 原始blobId=${blobId}, 规范化blobId=${normalizedBlobId}`);
-    
-    // 获取原始数据
-    try {
-      const buffer = await fetchDataById(normalizedBlobId);
-      const text = new TextDecoder().decode(buffer);
+export { fetchDataById, getWalrusContent, uploadJsonData, uploadTextData, uploadToWalrus };
 
-      try {
-        // 尝试解析为JSON
-        const jsonData = JSON.parse(text);
-        console.log(`成功解析为JSON: ${normalizedBlobId}`);
-        return jsonData;
-      } catch (e) {
-        // 如果不是JSON，则返回文本
-        console.log(`不是JSON，返回文本: ${normalizedBlobId}`);
-        return { text };
-      }
-    } catch (fetchError) {
-      // 捕获并记录fetchDataById的错误
-      console.error(`从Walrus获取内容失败(fetchDataById): ${normalizedBlobId}`, fetchError);
-      
-      if (axios.isAxiosError(fetchError) && fetchError.response?.status === 404) {
-        return { 
-          error: "内容不存在或已被删除", 
-          text: "此内容可能已被删除或暂时无法访问",
-          originalBlobId: blobId,
-          normalizedBlobId
-        };
-      }
-      
-      return { 
-        error: fetchError instanceof Error ? fetchError.message : "未知错误", 
-        text: "内容加载失败",
-        originalBlobId: blobId,
-        normalizedBlobId
-      };
-    }
-  } catch (error) {
-    console.error(`从Walrus获取内容失败(总体): ${blobId}`, error);
-    return { 
-      error: error instanceof Error ? error.message : "未知错误", 
-      text: "内容加载失败",
-      originalBlobId: blobId
-    };
-  }
-}

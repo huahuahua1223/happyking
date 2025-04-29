@@ -207,6 +207,13 @@ export const translations: LanguagePack = {
     "space.create.connect_wallet": "您需要连接钱包才能创建空间",
     "space.type.placeholder": "选择空间类型",
 
+    "space.ffmpeg_loading": "正在加载 FFmpeg，请稍候...",
+  "space.compressing": "正在压缩视频...",
+  "space.creating": "创建空间中...",
+  "space.confirm_transaction": "请确认钱包交易",
+  "error.compression_failed": "视频压缩失败，请检查文件格式或稍后重试",
+  "error.ffmpeg_load_failed": "FFmpeg 加载失败，请刷新页面重试",
+
     // 评论
     // Comments
     "space.comments.publish": "发表评论",

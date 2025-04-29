@@ -1,7 +1,5 @@
-import axios from "axios"
-
-const PUBLISHER = "https://publisher.walrus-testnet.walrus.space/v1/blobs"
-const AGGREGATOR = "https://aggregator.walrus-testnet.walrus.space/v1/blobs"
+import { AGGREGATOR_URL, PUBLISHER_URL } from "@/lib/constants";
+import axios from "axios";
 
 interface WalrusResponse {
   alreadyCertified?: { blobId: string }
@@ -57,7 +55,7 @@ async function uploadData(data: ArrayBuffer, contentType: string, retries = 5): 
       console.log(`尝试上传 (${attempt}/${retries}), 数据大小: ${data.byteLength} 字节`)
 
       // 增加超时时间，处理网络不稳定情况
-      const response = await axios.put(PUBLISHER, data, {
+      const response = await axios.put(PUBLISHER_URL, data, {
         headers: { "Content-Type": contentType },
         timeout: 60000, // 60秒超时
       })
@@ -138,7 +136,7 @@ export async function fetchDataById(blobId: string, retries = 3, timeoutMs = 150
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
       
       try {
-        const response = await axios.get(`${AGGREGATOR}/${normalizedBlobId}`, {
+        const response = await axios.get(`${AGGREGATOR_URL}/${normalizedBlobId}`, {
           responseType: "arraybuffer",
           timeout: timeoutMs,
           signal: controller.signal as any, // 类型转换以适配 axios

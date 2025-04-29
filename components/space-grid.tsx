@@ -5,16 +5,14 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useContracts } from "@/hooks/use-contracts"
+import { AGGREGATOR_URL } from "@/lib/constants"
+import { useLanguage } from "@/lib/i18n/context"
 import { getAllSpaces } from "@/services/space-service"
-import { getWalrusContent } from "@/services/upload-service"
+import { fetchDataById, getWalrusContent } from "@/services/upload-service"
 import { Flame, Loader2, MessageSquare, ThumbsUp } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { useEffect, useState } from "react"
-import { useLanguage } from "@/lib/i18n/context"
-
-// 在文件顶部添加AGGREGATOR_URL导入
-import { AGGREGATOR_URL } from "@/lib/constants"
 
 // 定义空间类型
 interface SpaceData {
@@ -22,8 +20,10 @@ interface SpaceData {
   title: string
   creator: string
   creatorAvatar: string
-  type: string
-  image: string
+  type: "text" | "meme" | "video"
+  image?: string // 仅 meme 类型使用
+  videoUrl?: string // 仅 video 类型使用
+  textPreview?: string // 仅 text 类型使用
   likes: number
   comments: number
   heat: number
@@ -31,8 +31,9 @@ interface SpaceData {
   textPreview?: string
 }
 
-// 全局缓存，用于存储已获取的Walrus内容
+// 全局缓存
 const walrusContentCache = new Map<string, any>()
+const videoUrlCache = new Map<string, string>()
 
 export default function SpaceGrid() {
   const { t } = useLanguage()
@@ -42,44 +43,35 @@ export default function SpaceGrid() {
   const [error, setError] = useState<string | null>(null)
   const { space: spaceContract } = useContracts()
 
-  // 从区块链获取空间数据
+  // 从区块链获取空间数据并初始化
   useEffect(() => {
     async function fetchSpaces() {
-      if (!spaceContract) {
-        return
-      }
+      if (!spaceContract) return
 
       try {
         setLoading(true)
         setError(null)
 
-        // 从区块链获取所有空间
         const spacesFromChain = await getAllSpaces(spaceContract)
         console.log("从区块链获取的空间:", spacesFromChain)
 
-        // 转换数据格式
         const formattedSpaces = spacesFromChain.map((space, index) => {
-          let spaceType = Number(space.spaceType)
-          // 根据空间类型确定类型标签
-          let type = "text"
-          if (spaceType === 1) {
-            type = "meme"
-          } else if (spaceType === 2) {
-            type = "video"
-          }
+          const spaceType = Number(space.spaceType)
+          let type: SpaceData["type"] = "text"
+          if (spaceType === 1) type = "meme"
+          else if (spaceType === 2) type = "video"
 
-          console.log(`空间ID: ${index + 1}, 类型: ${spaceType}, 类型标签: ${type}, 标题: ${space.title}`)
-
-          // 创建格式化的空间对象
           return {
-            id: index + 1, // 使用索引+1作为ID
+            id: index + 1,
             title: space.title || "未命名空间",
             creator: space.creator || "未知创建者",
-            creatorAvatar: "/abstract-user-icon.png", // 默认头像
+            creatorAvatar: "/martial-arts-master-humor.png",
             type,
-            image: type !== "text" ? `${AGGREGATOR_URL}${space.walrusBlobId}` : "",
+            image: type === "meme" ? `${AGGREGATOR_URL}/${space.walrusBlobId}` : undefined,
+            videoUrl: undefined,
+            textPreview: undefined,
             likes: Number(space.likes) || 0,
-            comments: 0, // 评论数暂时没有
+            comments: 0,
             heat: Number(space.heat) || 0,
             walrusBlobId: space.walrusBlobId || "",
           }
@@ -87,12 +79,8 @@ export default function SpaceGrid() {
 
         setSpaces(formattedSpaces)
 
-        // 获取每个空间的Walrus内容
-        for (const space of formattedSpaces) {
-          if (space.walrusBlobId) {
-            fetchWalrusContent(space)
-          }
-        }
+        // 异步加载内容
+        formattedSpaces.forEach(fetchWalrusContent)
       } catch (err) {
         console.error("获取空间失败:", err)
         setError("获取空间数据失败，请稍后再试")
@@ -104,62 +92,84 @@ export default function SpaceGrid() {
     fetchSpaces()
   }, [spaceContract])
 
-  // 从Walrus获取内容并更新空间图片
-  async function fetchWalrusContent(space: SpaceData) {
+  // 获取 Walrus 内容
+  const fetchWalrusContent = async (space: SpaceData) => {
+    if (!space.walrusBlobId) return
+
     try {
-      // 检查缓存中是否已有此内容
+      // 检查缓存
       if (walrusContentCache.has(space.walrusBlobId)) {
         const cachedContent = walrusContentCache.get(space.walrusBlobId)
-        updateSpaceWithWalrusContent(space, cachedContent)
+        updateSpaceContent(space, cachedContent)
         return
       }
 
-      console.log(`获取空间 ${space.id} 的Walrus内容...`)
+      console.log(`获取空间 ${space.id} 的 Walrus 内容...`)
       const content = await getWalrusContent(space.walrusBlobId)
-
-      if (content) {
-        console.log(`空间 ${space.id} 的Walrus内容:`, content)
-
-        // 将内容存入缓存
-        walrusContentCache.set(space.walrusBlobId, content)
-
-        // 更新空间图片和内容
-        updateSpaceWithWalrusContent(space, content)
-      }
+      walrusContentCache.set(space.walrusBlobId, content)
+      updateSpaceContent(space, content)
     } catch (err) {
-      console.error(`获取空间 ${space.id} 的Walrus内容失败:`, err)
+      console.error(`获取空间 ${space.id} 的 Walrus 内容失败:`, err)
     }
   }
 
-  // 修改updateSpaceWithWalrusContent函数，直接使用AGGREGATOR_URL和blobId
-  function updateSpaceWithWalrusContent(space: SpaceData, content: any) {
-    try {
-      // 为文本类型空间提取内容预览
-      if (space.type === "text" && content && content.content) {
-        setSpaces((prevSpaces) => 
-          prevSpaces.map((s) => 
-            s.id === space.id 
-              ? { ...s, textPreview: content.content.substring(0, 200) } 
-              : s
+  // 更新空间内容
+  const updateSpaceContent = async (space: SpaceData, content: any) => {
+    if (space.type === "text") {
+      const textPreview = content.text || "无文本内容"
+      setSpaces((prev) =>
+        prev.map((s) =>
+          s.id === space.id ? { ...s, textPreview } : s
+        )
+      )
+    } else if (space.type === "video") {
+      // 检查视频 URL 缓存
+      if (videoUrlCache.has(space.walrusBlobId)) {
+        setSpaces((prev) =>
+          prev.map((s) =>
+            s.id === space.id ? { ...s, videoUrl: videoUrlCache.get(space.walrusBlobId) } : s
           )
         )
-        console.log(`已更新空间 ${space.id} 的文本预览`);
-        return;
+        return
       }
-      
-      // 从AGGREGATOR_URL和blobId构建图片URL
-      const imageUrl = `${AGGREGATOR_URL}${space.walrusBlobId}`
 
-      // 直接更新空间的图片URL，不再尝试从内容中提取
-      setSpaces((prevSpaces) => prevSpaces.map((s) => (s.id === space.id ? { ...s, image: imageUrl } : s)))
+      // 拉取视频分片并生成 Blob URL
+      try {
+        const metadata = content // getWalrusContent 返回元数据
+        if (!metadata.chunks || !Array.isArray(metadata.chunks)) {
+          throw new Error("无效的视频元数据")
+        }
 
-      console.log(`已更新空间 ${space.id} 的图片URL: ${imageUrl}`)
-    } catch (error) {
-      console.error(`更新空间内容失败: ${error}`)
+        const blobs: Blob[] = []
+        for (const chunk of metadata.chunks.sort((a: any, b: any) => a.index - b.index)) {
+          const chunkBuffer = await fetchDataById(chunk.blobId)
+          blobs.push(new Blob([chunkBuffer], { type: metadata.mimeType }))
+        }
+
+        const videoBlob = new Blob(blobs, { type: metadata.mimeType })
+        const videoUrl = URL.createObjectURL(videoBlob)
+        videoUrlCache.set(space.walrusBlobId, videoUrl)
+
+        setSpaces((prev) =>
+          prev.map((s) =>
+            s.id === space.id ? { ...s, videoUrl } : s
+          )
+        )
+      } catch (err) {
+        console.error(`处理视频 ${space.id} 失败:`, err)
+      }
     }
+    // meme 类型已通过 image 初始化，无需额外处理
   }
 
-  // 如果正在加载，显示加载状态
+  // 清理 Blob URL
+  useEffect(() => {
+    return () => {
+      videoUrlCache.forEach((url) => URL.revokeObjectURL(url))
+      videoUrlCache.clear()
+    }
+  }, [])
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
@@ -169,7 +179,6 @@ export default function SpaceGrid() {
     )
   }
 
-  // 如果有错误，显示错误信息
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -181,7 +190,6 @@ export default function SpaceGrid() {
     )
   }
 
-  // 如果没有空间数据，显示提示信息
   if (spaces.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -203,67 +211,23 @@ export default function SpaceGrid() {
           <TabsTrigger value="text">{t("space.type.text")}</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="all" className="mt-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {spaces.map((space) => (
-              <SpaceCard
-                key={space.id}
-                space={space}
-                isVideoHovered={hoveredVideo === space.id}
-                onMouseEnter={() => space.type === "video" && setHoveredVideo(space.id)}
-                onMouseLeave={() => setHoveredVideo(null)}
-              />
-            ))}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="video" className="mt-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {spaces
-              .filter((space) => space.type === "video")
-              .map((space) => (
-                <SpaceCard
-                  key={space.id}
-                  space={space}
-                  isVideoHovered={hoveredVideo === space.id}
-                  onMouseEnter={() => setHoveredVideo(space.id)}
-                  onMouseLeave={() => setHoveredVideo(null)}
-                />
-              ))}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="meme" className="mt-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {spaces
-              .filter((space) => space.type === "meme")
-              .map((space) => (
-                <SpaceCard
-                  key={space.id}
-                  space={space}
-                  isVideoHovered={hoveredVideo === space.id}
-                  onMouseEnter={() => setHoveredVideo(space.id)}
-                  onMouseLeave={() => setHoveredVideo(null)}
-                />
-              ))}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="text" className="mt-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {spaces
-              .filter((space) => space.type === "text")
-              .map((space) => (
-                <SpaceCard
-                  key={space.id}
-                  space={space}
-                  isVideoHovered={hoveredVideo === space.id}
-                  onMouseEnter={() => setHoveredVideo(space.id)}
-                  onMouseLeave={() => setHoveredVideo(null)}
-                />
-              ))}
-          </div>
-        </TabsContent>
+        {["all", "video", "meme", "text"].map((tab) => (
+          <TabsContent key={tab} value={tab} className="mt-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {spaces
+                .filter((space) => tab === "all" || space.type === tab)
+                .map((space) => (
+                  <SpaceCard
+                    key={space.id}
+                    space={space}
+                    isVideoHovered={hoveredVideo === space.id}
+                    onMouseEnter={() => space.type === "video" && setHoveredVideo(space.id)}
+                    onMouseLeave={() => setHoveredVideo(null)}
+                  />
+                ))}
+            </div>
+          </TabsContent>
+        ))}
       </Tabs>
     </div>
   )
@@ -292,58 +256,60 @@ function SpaceCard({
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
       >
-        {space.type !== "text" ? (
-          // 对于图片(meme)和视频类型，显示图片
-          <div className="relative aspect-video">
+        <div className="relative aspect-video">
+          {space.type === "meme" && (
             <Image
-              src={imageError ? "/abstract-thumbnail.png" : space.image}
+              src={imageError ? "/martial-arts-master-humor.png" : space.image!}
               alt={space.title}
               fill
               className="object-cover"
-              onError={(e) => {
+              onError={() => {
                 console.error(`图片加载失败: ${space.image}`)
                 setImageError(true)
               }}
             />
-            {space.type === "video" && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                {isVideoHovered ? (
-                  <div className="w-12 h-12 rounded-full bg-black/50 flex items-center justify-center">
-                    <div className="w-3 h-8 bg-white rounded-sm"></div>
-                  </div>
-                ) : (
-                  <div className="w-12 h-12 rounded-full bg-black/50 flex items-center justify-center">
-                    <div className="w-0 h-0 border-y-8 border-y-transparent border-l-12 border-l-white ml-1"></div>
-                  </div>
-                )}
-              </div>
-            )}
-            <div className="absolute top-2 right-2">
-              <Badge variant="secondary" className="flex items-center gap-1">
-                <Flame className="h-3 w-3 text-orange-500" />
-                <span>{space.heat}</span>
-              </Badge>
+          )}
+          {space.type === "video" && space.videoUrl && (
+            <video
+              src={space.videoUrl}
+              className="w-full h-full object-cover"
+              muted
+              loop
+              autoPlay={isVideoHovered}
+            />
+          )}
+          {space.type === "text" && (
+            <div className="w-full h-full bg-muted flex items-center justify-center p-4">
+              <p className="text-sm text-muted-foreground line-clamp-3">
+                {space.textPreview || "加载文本中..."}
+              </p>
             </div>
+          )}
+          {space.type === "video" && !space.videoUrl && (
+            <div className="w-full h-full bg-muted flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          )}
+          {space.type === "video" && space.videoUrl && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              {isVideoHovered ? (
+                <div className="w-12 h-12 rounded-full bg-black/50 flex items-center justify-center">
+                  <div className="w-3 h-8 bg-white rounded-sm"></div>
+                </div>
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-black/50 flex items-center justify-center">
+                  <div className="w-0 h-0 border-y-8 border-y-transparent border-l-12 border-l-white ml-1"></div>
+                </div>
+              )}
+            </div>
+          )}
+          <div className="absolute top-2 right-2">
+            <Badge variant="secondary" className="flex items-center gap-1">
+              <Flame className="h-3 w-3 text-orange-500" />
+              <span>{space.heat}</span>
+            </Badge>
           </div>
-        ) : (
-          // 对于文本类型，显示简洁的文本卡片
-          <div className="bg-gradient-to-br from-muted/20 to-muted/40 p-6 aspect-video flex flex-col justify-between relative">
-            {/* 装饰性引号 */}
-            <div className="absolute top-3 left-3 text-4xl text-muted-foreground/30 font-serif">"</div>
-            <div className="absolute bottom-3 right-3 text-4xl text-muted-foreground/30 font-serif rotate-180">"</div>
-            
-            <div className="line-clamp-5 text-sm text-foreground/80 italic mt-4 mx-4 z-10">
-              {space.textPreview || t("space.content.placeholder")}
-            </div>
-            
-            <div className="flex justify-end mt-4">
-              <Badge variant="secondary" className="flex items-center gap-1">
-                <Flame className="h-3 w-3 text-orange-500" />
-                <span>{space.heat}</span>
-              </Badge>
-            </div>
-          </div>
-        )}
+        </div>
         <CardContent className="p-4">
           <div className="flex items-center gap-2 mb-2">
             <div
@@ -355,7 +321,7 @@ function SpaceCard({
               className="cursor-pointer"
             >
               <Avatar className="h-6 w-6">
-                <AvatarImage src={space.creatorAvatar || "/abstract-user-icon.png"} alt="创建者" />
+                <AvatarImage src={space.creatorAvatar} alt="创建者" />
                 <AvatarFallback>用户</AvatarFallback>
               </Avatar>
             </div>

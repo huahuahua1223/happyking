@@ -1,7 +1,5 @@
 "use client"
 
-import type React from "react"
-
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -12,15 +10,15 @@ import { Textarea } from "@/components/ui/textarea"
 import { useContracts } from "@/hooks/use-contracts"
 import { useWallet } from "@/hooks/use-wallet"
 import { SPACE_TYPE_LABELS, SpaceType } from "@/lib/constants"
-import { getTechnicalErrorDetails } from "@/lib/error-handler"
-import { getUserFriendlyError as getErrorMessage } from "@/lib/error-handler"
+import { getUserFriendlyError as getErrorMessage, getTechnicalErrorDetails } from "@/lib/error-handler"
 import { useLanguage } from "@/lib/i18n/context"
 import { createSpace } from "@/services/space-service"
 import { uploadToWalrus } from "@/services/upload-service"
 import { AlertCircle, ArrowLeft, ImageIcon, Loader2, Video } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useRef, useState } from "react"
+import type React from "react"
+import { useEffect, useRef, useState } from "react"
 
 export default function CreateSpacePage() {
   const router = useRouter()
@@ -28,9 +26,8 @@ export default function CreateSpacePage() {
   const { space } = useContracts()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { t } = useLanguage()
-  
-  // 本地化的错误处理辅助函数
-  const getUserFriendlyError = (error: any, errorType = "unknown") => 
+
+  const getUserFriendlyError = (error: any, errorType = "unknown") =>
     getErrorMessage(error, errorType, t)
 
   const [formData, setFormData] = useState({
@@ -43,10 +40,34 @@ export default function CreateSpacePage() {
   })
 
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [isCompressing, setIsCompressing] = useState(false)
+  const [isFffmpegLoading, setIsFffmpegLoading] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploadProgress, setUploadProgress] = useState(0)
-  const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const ffmpegRef = useRef<any>(null)
+  const [skipCompression, setSkipCompression] = useState(false) // 新增：跳过压缩选项
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const loadFFmpeg = async () => {
+      try {
+        setIsFffmpegLoading(true)
+        const { FFmpeg } = await import("@ffmpeg/ffmpeg")
+        const { fetchFile } = await import("@ffmpeg/util")
+        ffmpegRef.current = { FFmpeg: new FFmpeg(), fetchFile }
+        await ffmpegRef.current.FFmpeg.load()
+      } catch (error) {
+        console.error("FFmpeg 加载失败:", getTechnicalErrorDetails(error))
+        setUploadError(`FFmpeg 加载失败: ${getUserFriendlyError(error, "ffmpeg_load_failed")}`)
+      } finally {
+        setIsFffmpegLoading(false)
+      }
+    }
+    loadFFmpeg()
+  }, [])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -55,25 +76,59 @@ export default function CreateSpacePage() {
 
   const handleSelectChange = (name: string, value: string) => {
     setFormData((prev) => ({ ...prev, [name]: value }))
-    // 当切换空间类型时，重置已选文件
     setSelectedFile(null)
     setUploadProgress(0)
     setUploadError(null)
   }
 
-  // 处理文件选择点击
   const handleFileClick = () => {
     if (fileInputRef.current) {
       fileInputRef.current.click()
     }
   }
 
-  // 处理文件选择变化
+  const compressVideo = async (file: File): Promise<File> => {
+    if (!ffmpegRef.current?.FFmpeg?.loaded) {
+      throw new Error("FFmpeg 未加载，请稍后重试")
+    }
+
+    const { FFmpeg, fetchFile } = ffmpegRef.current
+    const inputPath = `input.${file.name.split(".").pop()}`
+    const outputPath = `output_compressed.mp4`
+
+    try {
+      await FFmpeg.writeFile(inputPath, await fetchFile(file))
+      await FFmpeg.exec([
+        "-i",
+        inputPath,
+        "-c:v",
+        "libx264",
+        "-crf",
+        "26",
+        "-preset",
+        "fast",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-vf",
+        "scale=-2:720",
+        outputPath,
+      ])
+
+      const compressedData = await FFmpeg.readFile(outputPath)
+      const compressedFile = new File([compressedData], `compressed_${file.name}`, { type: "video/mp4" })
+      return compressedFile
+    } finally {
+      await FFmpeg.deleteFile(inputPath).catch(() => {})
+      await FFmpeg.deleteFile(outputPath).catch(() => {})
+    }
+  }
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // 检查标题是否已填写
     if (!formData.title.trim()) {
       console.error(`请先填写标题`)
       setUploadError("请先填写空间标题")
@@ -83,85 +138,81 @@ export default function CreateSpacePage() {
     setSelectedFile(file)
     setUploadError(null)
 
-    // 验证文件类型
     const spaceTypeNum = Number(formData.spaceType)
     if (spaceTypeNum === SpaceType.MEME && !file.type.startsWith("image/")) {
       setUploadError(getUserFriendlyError(null, "invalid_file_type"))
       return
     }
-
     if (spaceTypeNum === SpaceType.VIDEO && !file.type.startsWith("video/")) {
       setUploadError(getUserFriendlyError(null, "invalid_file_type"))
       return
     }
 
-    // 验证文件大小
     if (spaceTypeNum === SpaceType.VIDEO && file.size > 50 * 1024 * 1024) {
       setUploadError(getUserFriendlyError(null, "file_too_large_video"))
       return
     }
-
     if (spaceTypeNum === SpaceType.MEME && file.size > 5 * 1024 * 1024) {
       setUploadError(getUserFriendlyError(null, "file_too_large"))
       return
+    }
+
+    let fileToUpload = file
+    if (spaceTypeNum === SpaceType.VIDEO && !skipCompression) {
+      if (isFffmpegLoading || !ffmpegRef.current) {
+        setUploadError("FFmpeg 正在加载，请稍后重试")
+        return
+      }
+      try {
+        setIsCompressing(true)
+        fileToUpload = await compressVideo(file)
+        setSelectedFile(fileToUpload)
+      } catch (error) {
+        console.error("视频压缩失败:", getTechnicalErrorDetails(error))
+        setUploadError(`视频压缩失败: ${getUserFriendlyError(error, "compression_failed")}`)
+        setIsCompressing(false)
+        return
+      } finally {
+        setIsCompressing(false)
+      }
     }
 
     try {
       setIsUploading(true)
       setUploadProgress(0)
 
-      // 上传文件到Walrus
       const blobId = await uploadToWalrus(
-        file,
+        fileToUpload,
         (progress) => {
-          // 确保进度不会回退到0，除非是重试
           if (progress > 0 || uploadProgress === 0) {
             setUploadProgress(progress)
           }
         },
-        undefined, // 不使用status回调
-        t,
+        (status) => console.log(status),
+        t
       )
 
-      // 更新表单数据
       setFormData((prev) => ({ ...prev, walrusBlobId: blobId }))
       console.log(`文件上传成功: ${t("space.upload.success")}`)
 
-      // 文件上传成功后，立即调用createSpace进行链上交互
       if (space && isConnected) {
         try {
           setIsSubmitting(true)
           console.log("文件上传成功，立即开始创建空间...")
 
-          // 准备代币名称和符号
           const tokenName = formData.name || formData.title.substring(0, 3)
           const tokenSymbol = formData.symbol || tokenName
 
-          // 确保 spaceType 是有效的数字
-          const spaceTypeNum = Number(formData.spaceType)
-          
-          console.log(`创建空间类型: ${spaceTypeNum}, 枚举值: ${SpaceType[spaceTypeNum]}`);
-
-          console.log("调用createSpace服务方法...", {
-            spaceType: spaceTypeNum,
-            title: formData.title,
-            blobId,
-            tokenName,
-            tokenSymbol,
-          })
-
-          // 调用服务中的createSpace方法
           const result = await createSpace(
             space,
-            spaceTypeNum, // 使用数字类型
+            spaceTypeNum,
             formData.title,
-            blobId, // 使用刚上传的blobId
+            blobId,
             tokenName,
-            tokenSymbol,
+            tokenSymbol
           )
 
           console.log("空间创建成功:", result)
-
           if (result.spaceId) {
             console.log("重定向到新创建的空间页面:", `/space/${result.spaceId}`)
             router.push(`/space/${result.spaceId}`)
@@ -171,16 +222,13 @@ export default function CreateSpacePage() {
           }
         } catch (error) {
           console.error("创建空间失败:", getTechnicalErrorDetails(error))
-          const errorMessage = error instanceof Error ? error.message : getUserFriendlyError(error, "contract_error")
-          setUploadError(`创建空间失败: ${errorMessage}`)
+          setUploadError(`创建空间失败: ${getUserFriendlyError(error, "contract_error")}`)
         } finally {
           setIsSubmitting(false)
         }
       }
     } catch (error) {
       console.error("上传文件失败详情:", getTechnicalErrorDetails(error))
-
-      // 检查是否是限流错误
       let errorType = "upload_failed"
       if (error instanceof Error) {
         if (error.message.includes("rate limit") || error.message.includes("too many requests")) {
@@ -188,25 +236,26 @@ export default function CreateSpacePage() {
         } else if (error.message.includes("timeout") || error.message.includes("exceeded")) {
           errorType = "upload_timeout"
         } else if (error.message.includes("Network Error") || !navigator.onLine) {
-          errorType = "testnet_unstable"
+          errorType = "network_error"
         }
       }
-
-      // 使用友好的错误消息
-      const errorMessage = error instanceof Error ? error.message : getUserFriendlyError(error, errorType)
-      setUploadError(`文件上传失败: ${errorMessage}`)
+      setUploadError(`文件上传失败: ${getUserFriendlyError(error, errorType)}`)
     } finally {
       setIsUploading(false)
     }
   }
 
-  // 根据空间类型获取上传区域的信息
+  const handleRetry = () => {
+    if (selectedFile) {
+      handleFileChange({ target: { files: [selectedFile] } } as React.ChangeEvent<HTMLInputElement>)
+    }
+  }
+
   const getUploadInfo = () => {
     const spaceTypeNum = Number(formData.spaceType)
-
     switch (spaceTypeNum) {
       case SpaceType.TEXT:
-        return null // 文字类型不需要上传区域
+        return null
       case SpaceType.MEME:
         return {
           title: t("space.upload.meme"),
@@ -228,44 +277,32 @@ export default function CreateSpacePage() {
     }
   }
 
-  // 表单验证
   const validateForm = () => {
     if (!formData.title.trim()) {
       console.error(`表单不完整: ${t("form.please.enter")} ${t("space.title")}`)
       return false
     }
-
     const spaceTypeNum = Number(formData.spaceType)
-
-    // 文字类型需要检查内容
     if (spaceTypeNum === SpaceType.TEXT && !formData.content.trim()) {
       console.error(`表单不完整: ${t("form.please.enter")} ${t("space.content")}`)
       return false
     }
-
     return true
   }
 
-  // 提交表单 - 仅用于文本类型空间
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
     if (!isConnected) {
       console.error(`钱包未连接: ${t("wallet.not_connected")}`)
       return
     }
-
     if (!space) {
       console.error(`合约未加载: ${t("contract.not_loaded")}`)
       return
     }
-
-    // 表单验证
     if (!validateForm()) {
       return
     }
-
-    // 只处理文本类型空间，其他类型在文件上传后已处理
     if (Number(formData.spaceType) !== SpaceType.TEXT) {
       console.log("非文本类型空间，应在文件上传后处理")
       return
@@ -275,41 +312,33 @@ export default function CreateSpacePage() {
       setIsSubmitting(true)
       console.log("开始创建文本类型空间...")
 
-      // 如果没有提供代币名称，使用空间标题的前三个字符
       const tokenName = formData.name || formData.title.substring(0, 3)
-      // 如果没有提供代币符号，使用代币名称
       const tokenSymbol = formData.symbol || tokenName
 
-      // 处理文本类型空间
       console.log("文本类型空间，准备上传内容...")
-      // 对于文字类型，将内容上传到Walrus
       const textContent = {
         content: formData.content,
         timestamp: Date.now(),
       }
 
       try {
-        // 将JSON转换为Blob并上传
         const textBlob = new Blob([JSON.stringify(textContent)], { type: "application/json" })
         const textFile = new File([textBlob], "content.json", { type: "application/json" })
-
         console.log("上传文本内容到Walrus...")
         const blobId = await uploadToWalrus(textFile)
         console.log("文本内容上传成功，blobId:", blobId)
 
-        // 调用服务中的createSpace方法
         console.log("调用createSpace服务方法...")
         const result = await createSpace(
           space,
-          SpaceType.TEXT, // 使用枚举值 0
+          SpaceType.TEXT,
           formData.title,
           blobId,
           tokenName,
-          tokenSymbol,
+          tokenSymbol
         )
 
         console.log("空间创建成功:", result)
-
         if (result.spaceId) {
           console.log("重定向到新创建的空间页面:", `/space/${result.spaceId}`)
           router.push(`/space/${result.spaceId}`)
@@ -425,13 +454,27 @@ export default function CreateSpacePage() {
               />
             </div>
 
-            {/* 隐藏的文件输入框 */}
+            {/* 新增：跳过压缩选项 */}
+            {Number(formData.spaceType) === SpaceType.VIDEO && (
+              <div className="space-y-2">
+                <Label>
+                  <input
+                    type="checkbox"
+                    checked={skipCompression}
+                    onChange={(e) => setSkipCompression(e.target.checked)}
+                  />
+                  <span className="ml-2">{t("space.skip_compression")}</span>
+                </Label>
+              </div>
+            )}
+
             <input
               type="file"
               ref={fileInputRef}
               onChange={handleFileChange}
               className="hidden"
               accept={Number(formData.spaceType) === SpaceType.MEME ? "image/*" : "video/*"}
+              disabled={isFffmpegLoading}
             />
 
             {uploadInfo && (
@@ -441,15 +484,27 @@ export default function CreateSpacePage() {
                   className={`border border-dashed rounded-lg p-8 text-center cursor-pointer hover:bg-muted/50 transition-colors ${
                     uploadError ? "border-destructive" : ""
                   }`}
-                  onClick={!isUploading && !isSubmitting ? handleFileClick : undefined}
+                  onClick={!isUploading && !isSubmitting && !isCompressing && !isFffmpegLoading ? handleFileClick : undefined}
                 >
-                  {isUploading || isSubmitting ? (
+                  {isFffmpegLoading ? (
+                    <div className="space-y-4">
+                      <Loader2 className="h-8 w-8 mb-2 text-muted-foreground animate-spin" />
+                      <p className="text-sm font-medium mb-2">{t("space.ffmpeg_loading")}</p>
+                    </div>
+                  ) : isCompressing ? (
+                    <div className="space-y-4">
+                      <Loader2 className="h-8 w-8 mb-2 text-muted-foreground animate-spin" />
+                      <p className="text-sm font-medium mb-2">{t("space.compressing")}</p>
+                    </div>
+                  ) : isUploading || isSubmitting ? (
                     <div className="space-y-4">
                       {uploadInfo.icon}
-                      <p className="text-sm font-medium mb-2">{isUploading ? t("space.uploading") : "创建空间中..."}</p>
+                      <p className="text-sm font-medium mb-2">
+                        {isUploading ? t("space.uploading") : t("space.creating")}
+                      </p>
                       <Progress value={isUploading ? uploadProgress : 100} className="w-full h-2" />
                       <p className="text-xs text-muted-foreground">
-                        {isUploading ? `${uploadProgress.toFixed(0)}%` : "请确认钱包交易"}
+                        {isUploading ? `${uploadProgress.toFixed(0)}%` : t("space.confirm_transaction")}
                       </p>
                     </div>
                   ) : selectedFile && !uploadError ? (
@@ -479,6 +534,9 @@ export default function CreateSpacePage() {
                   <div className="flex items-center text-destructive text-sm mt-1">
                     <AlertCircle className="h-4 w-4 mr-1" />
                     {uploadError}
+                    <Button variant="link" onClick={handleRetry} className="ml-2">
+                      {t("app.retry")}
+                    </Button>
                   </div>
                 )}
 
@@ -492,7 +550,7 @@ export default function CreateSpacePage() {
             </Button>
             <Button
               type="submit"
-              disabled={isSubmitting || isUploading || Number(formData.spaceType) !== SpaceType.TEXT}
+              disabled={isSubmitting || isUploading || isCompressing || isFffmpegLoading || Number(formData.spaceType) !== SpaceType.TEXT}
             >
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {t("space.create")}
