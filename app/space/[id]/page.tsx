@@ -23,6 +23,7 @@ import {
   Share2,
   ThumbsUp,
   Wallet,
+  Copy,
 } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -36,8 +37,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Icons } from "@/components/icons"
-import { copy } from "@/lib/utils"
 import { format } from "date-fns"
 
 // Define content interface
@@ -234,10 +233,14 @@ export default function SpaceDetailPage({ params }: { params: SpaceParams }) {
   if (error || !spaceData) {
     return (
       <div className="container mx-auto px-4 py-8">
-        <Link href="/" className="inline-flex items-center mb-6 text-muted-foreground hover:text-foreground">
+        <Button
+          variant="ghost"
+          className="inline-flex items-center mb-6 text-muted-foreground hover:text-foreground"
+          onClick={() => router.back()}
+        >
           <ArrowLeft className="mr-2 h-4 w-4" />
-          {t("nav.back.home")}
-        </Link>
+          返回上一级
+        </Button>
 
         <Card className="p-6 text-center">
           <Wallet className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
@@ -250,10 +253,14 @@ export default function SpaceDetailPage({ params }: { params: SpaceParams }) {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <Link href="/" className="inline-flex items-center mb-6 text-muted-foreground hover:text-foreground">
+      <Button
+        variant="ghost"
+        className="inline-flex items-center mb-6 text-muted-foreground hover:text-foreground"
+        onClick={() => router.back()}
+      >
         <ArrowLeft className="mr-2 h-4 w-4" />
-        {t("nav.back.home")}
-      </Link>
+        返回上一级
+      </Button>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
